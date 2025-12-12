@@ -1,0 +1,12 @@
+{
+  "name": "mathimg-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @mathimg/web dev",
+    "dev:api": "pnpm --filter @mathimg/api dev",
+    "build": "pnpm -r build",
+    "type-check": "pnpm -r type-check"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
