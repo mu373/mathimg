@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, DragEvent, useEffect, ClipboardEvent } from 'react';
+import { useState, useCallback, useMemo, DragEvent, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toolbar } from './Toolbar';
 import { EquationList } from './EquationList';
@@ -31,7 +31,7 @@ export function EditorLayout() {
   } = useEditorStore();
 
   const activeTab = getActiveTab();
-  const document = activeTab?.document ?? '';
+  const latexDocument = activeTab?.document ?? '';
   const parsedEquations = activeTab?.parsedEquations ?? [];
   const renderedSvgs = activeTab?.renderedSvgs ?? {};
 
@@ -106,36 +106,75 @@ export function EditorLayout() {
     }
   }, [importSvgEquations, checkSvgForDuplicates]);
 
-  const handlePaste = useCallback(async (e: ClipboardEvent<HTMLDivElement>) => {
-    // Check for SVG file in clipboard
-    const items = Array.from(e.clipboardData.items);
+  // Read SVG from clipboard using async Clipboard API
+  const readSvgFromClipboard = useCallback(async (): Promise<string | null> => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
 
-    // Look for SVG file
-    const svgFileItem = items.find(
-      item => item.type === 'image/svg+xml' || item.kind === 'file'
-    );
+      for (const item of clipboardItems) {
+        // Check for SVG file
+        if (item.types.includes('image/svg+xml')) {
+          const blob = await item.getType('image/svg+xml');
+          return await blob.text();
+        }
+        // Check for text that might be SVG
+        if (item.types.includes('text/plain')) {
+          const blob = await item.getType('text/plain');
+          const text = await blob.text();
+          if (text.trim().startsWith('<svg') || text.trim().startsWith('<?xml')) {
+            return text;
+          }
+        }
+      }
+    } catch {
+      // Clipboard API failed, return null
+    }
+    return null;
+  }, []);
 
-    if (svgFileItem?.kind === 'file') {
-      const file = svgFileItem.getAsFile();
-      if (file && (file.type === 'image/svg+xml' || file.name?.endsWith('.svg'))) {
-        e.preventDefault();
-        const content = await file.text();
-        await handleSvgImport(content);
+  // Global keyboard listener for Cmd/Ctrl+V
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      // Only handle Cmd+V (Mac) or Ctrl+V (Windows/Linux)
+      if (!((e.metaKey || e.ctrlKey) && e.key === 'v')) return;
+
+      // Don't intercept if focus is in an input, textarea, or contenteditable
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement?.getAttribute('contenteditable') === 'true'
+      ) {
         return;
       }
-    }
 
-    // Check for SVG text content in clipboard
-    const textItem = items.find(item => item.type === 'text/plain');
-    if (textItem) {
-      const text = e.clipboardData.getData('text/plain');
-      // Check if the text looks like SVG
-      if (text.trim().startsWith('<svg') || text.trim().startsWith('<?xml')) {
-        e.preventDefault();
-        await handleSvgImport(text);
+      // Don't intercept if focus is in Monaco editor
+      if (activeElement?.closest('.monaco-editor')) {
+        return;
       }
+
+      const svgContent = await readSvgFromClipboard();
+      if (svgContent) {
+        e.preventDefault();
+        await handleSvgImport(svgContent);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [readSvgFromClipboard, handleSvgImport]);
+
+  // Handler for menu item "Import SVG from Clipboard"
+  const handleImportSvgFromClipboard = useCallback(async () => {
+    const svgContent = await readSvgFromClipboard();
+    if (svgContent) {
+      await handleSvgImport(svgContent);
+    } else {
+      // No SVG found - this will be handled by Toolbar with a toast
+      return null;
     }
-  }, [handleSvgImport]);
+    return svgContent;
+  }, [readSvgFromClipboard, handleSvgImport]);
 
   const handleImportOverwrite = useCallback(async () => {
     if (pendingSvgContent) {
@@ -187,9 +226,8 @@ export function EditorLayout() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onPaste={handlePaste}
     >
-      <Toolbar />
+      <Toolbar onImportSvgFromClipboard={handleImportSvgFromClipboard} />
       <div className="flex-1 overflow-hidden">
         <PanelGroup direction="horizontal">
           {/* Left Sidebar - Equation List */}
@@ -208,7 +246,7 @@ export function EditorLayout() {
           <Panel defaultSize={45} minSize={30}>
             <LatexDocument
               key={activeTabId}
-              document={document}
+              document={latexDocument}
               onChange={setDocument}
               onMount={(editor) => setEditorInstance(editor)}
             />

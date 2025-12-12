@@ -13,7 +13,11 @@ import {
 } from './ui/menubar';
 import { TabBar } from './TabBar';
 
-export function Toolbar() {
+interface ToolbarProps {
+  onImportSvgFromClipboard: () => Promise<string | null>;
+}
+
+export function Toolbar({ onImportSvgFromClipboard }: ToolbarProps) {
   const {
     newProject,
     saveProject,
@@ -87,38 +91,14 @@ export function Toolbar() {
 
   const handleImportSvgFromClipboard = async () => {
     try {
-      const clipboardItems = await navigator.clipboard.read();
-      let svgContent: string | null = null;
-
-      for (const item of clipboardItems) {
-        // Check for SVG file
-        if (item.types.includes('image/svg+xml')) {
-          const blob = await item.getType('image/svg+xml');
-          svgContent = await blob.text();
-          break;
-        }
-        // Check for text that might be SVG
-        if (item.types.includes('text/plain')) {
-          const blob = await item.getType('text/plain');
-          const text = await blob.text();
-          if (text.trim().startsWith('<svg') || text.trim().startsWith('<?xml')) {
-            svgContent = text;
-            break;
-          }
-        }
-      }
-
-      if (!svgContent) {
+      const result = await onImportSvgFromClipboard();
+      if (result === null) {
         toast({
           title: 'No SVG found in clipboard',
           description: 'Copy an SVG file or SVG text to clipboard first',
           variant: 'destructive',
         });
-        return;
       }
-
-      await importSvgEquations(svgContent);
-      toast({ title: 'SVG imported from clipboard' });
     } catch (error) {
       toast({
         title: 'Failed to import from clipboard',
