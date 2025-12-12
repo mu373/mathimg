@@ -297,7 +297,7 @@ export function TabBar() {
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
-            onClick={handleStartRename}
+            onClick={() => handleStartRename()}
             className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent"
           >
             Rename
