@@ -132,7 +132,6 @@ export function generateSVG(input: GenerateSVGOptions): GenerateSVGResult {
 
   const metadata = createMetadata({
     globalPreamble: input.options?.globalPreamble,
-    engine: input.options?.engine ?? 'katex',
     engineVersion: renderer.getVersion(),
     engineOptions: input.options?.engineOptions ?? {},
     equations: processedEquations,

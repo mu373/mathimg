@@ -9,7 +9,6 @@ export const SVGMetadataSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   globalPreamble: z.string().default(''),
-  engine: z.enum(['katex', 'mathjax']).default('katex'),
   engineVersion: z.string(),
   engineOptions: z.record(z.unknown()).default({}),
   equations: z.array(EquationSchema),

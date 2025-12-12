@@ -1,122 +1,187 @@
-import { Hono } from 'hono';
-import { zValidator } from '@hono/zod-validator';
-import { RenderRequestSchema, RenderQueryParamsSchema } from '@/schemas';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { RenderRequestSchema, RenderResponseSchema, RenderQueryParamsSchema } from '@/schemas';
 import { generateSVG } from '@/lib/svg/generator';
 
-const render = new Hono();
+const render = new OpenAPIHono();
 
-render.post(
-  '/',
-  zValidator('query', RenderQueryParamsSchema),
-  async (c) => {
-    const contentType = c.req.header('Content-Type') || '';
-    const acceptHeader = c.req.header('Accept') || 'image/svg+xml';
+const ErrorResponseSchema = z.object({
+  success: z.literal(false),
+  errors: z.array(z.string()).optional(),
+  error: z.string().optional(),
+});
 
-    if (contentType.includes('text/plain')) {
-      const latex = await c.req.text();
-      const { display, engine, metadata, color } = c.req.valid('query');
-
-      if (!latex || latex.trim() === '') {
-        return c.json(
-          {
-            success: false,
-            errors: ['LaTeX content is required'],
-          },
-          400
-        );
-      }
-
-      const result = generateSVG({
-        equations: [
-          {
-            latex: latex.trim(),
-            displayMode: display,
-          },
-        ],
-        options: {
-          globalPreamble: '',
-          engine,
-          embedMetadata: metadata,
-          color,
+// Route for JSON request/response
+const renderJsonRoute = createRoute({
+  method: 'post',
+  path: '/',
+  tags: ['Render'],
+  summary: 'Render LaTeX to SVG (JSON)',
+  description: 'Convert LaTeX equations to SVG with embedded metadata using JSON request/response',
+  request: {
+    query: RenderQueryParamsSchema,
+    body: {
+      content: {
+        'application/json': {
+          schema: RenderRequestSchema,
         },
-      });
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Successfully rendered SVG',
+      content: {
+        'application/json': {
+          schema: RenderResponseSchema,
+        },
+        'image/svg+xml': {
+          schema: z.string().openapi({
+            type: 'string',
+            format: 'binary',
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid request or rendering error',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
 
-      if (result.errors.length > 0) {
-        return c.json(
-          {
-            success: false,
-            errors: result.errors,
-          },
-          400
-        );
-      }
+// Route for plain text request
+const renderTextRoute = createRoute({
+  method: 'post',
+  path: '/text',
+  tags: ['Render'],
+  summary: 'Render LaTeX to SVG (Plain Text)',
+  description: 'Convert a single LaTeX equation to SVG using plain text request',
+  request: {
+    query: RenderQueryParamsSchema,
+    body: {
+      content: {
+        'text/plain': {
+          schema: z.string().openapi({
+            example: 'E = mc^2',
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Successfully rendered SVG',
+      content: {
+        'application/json': {
+          schema: RenderResponseSchema,
+        },
+        'image/svg+xml': {
+          schema: z.string().openapi({
+            type: 'string',
+            format: 'binary',
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid request or rendering error',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
 
-      if (acceptHeader.includes('application/json')) {
-        return c.json({
-          success: true,
-          svg: result.svg,
-          metadata: result.metadata,
-          errors: result.errors,
-        });
-      }
+render.openapi(renderJsonRoute, async (c) => {
+  const acceptHeader = c.req.header('Accept') || 'image/svg+xml';
+  const { equations, options } = c.req.valid('json');
 
-      return c.body(result.svg, 200, {
-        'Content-Type': 'image/svg+xml',
-      });
-    }
+  const result = generateSVG({
+    equations,
+    options,
+  });
 
-    if (contentType.includes('application/json')) {
-      const parseResult = RenderRequestSchema.safeParse(await c.req.json());
-
-      if (!parseResult.success) {
-        return c.json(
-          {
-            success: false,
-            errors: parseResult.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`),
-          },
-          400
-        );
-      }
-
-      const { equations, options } = parseResult.data;
-
-      const result = generateSVG({
-        equations,
-        options,
-      });
-
-      if (result.errors.length > 0 && equations.length === result.errors.length) {
-        return c.json(
-          {
-            success: false,
-            errors: result.errors,
-          },
-          400
-        );
-      }
-
-      if (acceptHeader.includes('application/json')) {
-        return c.json({
-          success: true,
-          svg: result.svg,
-          metadata: result.metadata,
-          errors: result.errors,
-        });
-      }
-
-      return c.body(result.svg, 200, {
-        'Content-Type': 'image/svg+xml',
-      });
-    }
-
+  if (result.errors.length > 0 && equations.length === result.errors.length) {
     return c.json(
       {
         success: false,
-        error: 'Content-Type must be text/plain or application/json',
+        errors: result.errors,
       },
-      415
+      400
     );
   }
-);
+
+  if (acceptHeader.includes('application/json')) {
+    return c.json({
+      success: true,
+      svg: result.svg,
+      metadata: result.metadata,
+      errors: result.errors,
+    });
+  }
+
+  return c.body(result.svg, 200, {
+    'Content-Type': 'image/svg+xml',
+  });
+});
+
+render.openapi(renderTextRoute, async (c) => {
+  const latex = await c.req.text();
+  const { display, metadata, color } = c.req.valid('query');
+  const acceptHeader = c.req.header('Accept') || 'image/svg+xml';
+
+  if (!latex || latex.trim() === '') {
+    return c.json(
+      {
+        success: false,
+        errors: ['LaTeX content is required'],
+      },
+      400
+    );
+  }
+
+  const result = generateSVG({
+    equations: [
+      {
+        latex: latex.trim(),
+        displayMode: display,
+      },
+    ],
+    options: {
+      globalPreamble: '',
+      embedMetadata: metadata,
+      color,
+    },
+  });
+
+  if (result.errors.length > 0) {
+    return c.json(
+      {
+        success: false,
+        errors: result.errors,
+      },
+      400
+    );
+  }
+
+  if (acceptHeader.includes('application/json')) {
+    return c.json({
+      success: true,
+      svg: result.svg,
+      metadata: result.metadata,
+      errors: result.errors,
+    });
+  }
+
+  return c.body(result.svg, 200, {
+    'Content-Type': 'image/svg+xml',
+  });
+});
 
 export default render;

@@ -3,7 +3,6 @@ import type { SVGMetadata, Equation } from '@/schemas';
 
 export interface CreateMetadataOptions {
   globalPreamble?: string;
-  engine?: 'katex' | 'mathjax';
   engineVersion: string;
   engineOptions?: Record<string, unknown>;
   equations: Equation[];
@@ -20,7 +19,6 @@ export function createMetadata(options: CreateMetadataOptions): SVGMetadata {
     createdAt: now,
     updatedAt: now,
     globalPreamble: options.globalPreamble ?? '',
-    engine: options.engine ?? 'katex',
     engineVersion: options.engineVersion,
     engineOptions: options.engineOptions ?? {},
     equations: options.equations,

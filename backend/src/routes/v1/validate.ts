@@ -1,24 +1,40 @@
-import { Hono } from 'hono';
-import { zValidator } from '@hono/zod-validator';
-import { ValidateRequestSchema } from '@/schemas';
-import { KaTeXRenderer } from '@/lib/renderers/katex';
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
+import { ValidateRequestSchema, ValidateResponseSchema } from '@/schemas';
+import { MathJaxRenderer } from '@/lib/renderers/mathjax';
 
-const validate = new Hono();
+const validate = new OpenAPIHono();
 
-validate.post('/', zValidator('json', ValidateRequestSchema), async (c) => {
-  const { latex, engine } = c.req.valid('json');
-
-  if (engine === 'mathjax') {
-    return c.json(
-      {
-        valid: false,
-        errors: ['MathJax engine not yet implemented'],
+const validateRoute = createRoute({
+  method: 'post',
+  path: '/',
+  tags: ['Validate'],
+  summary: 'Validate LaTeX syntax',
+  description: 'Check if LaTeX syntax is valid without rendering',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: ValidateRequestSchema,
+        },
       },
-      501
-    );
-  }
+    },
+  },
+  responses: {
+    200: {
+      description: 'Validation result',
+      content: {
+        'application/json': {
+          schema: ValidateResponseSchema,
+        },
+      },
+    },
+  },
+});
 
-  const renderer = new KaTeXRenderer();
+validate.openapi(validateRoute, async (c) => {
+  const { latex } = c.req.valid('json');
+
+  const renderer = new MathJaxRenderer();
   const result = renderer.validate(latex);
 
   return c.json({

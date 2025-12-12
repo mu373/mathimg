@@ -16,7 +16,6 @@ export const ParseResponseSchema = z.object({
 
 export const ValidateRequestSchema = z.object({
   latex: z.string().min(1, 'LaTeX content is required'),
-  engine: z.enum(['katex', 'mathjax']).optional().default('katex'),
 });
 
 export const ValidateResponseSchema = z.object({

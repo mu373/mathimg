@@ -25,7 +25,6 @@ curl -X POST "http://localhost:8787/api/v1/render?display=inline&color=%23FF0000
 
 **Query Parameters:**
 - `display`: `block` (default) or `inline`
-- `engine`: `katex` or `mathjax` (default: `mathjax`)
 - `metadata`: `true` (default) or `false`
 - `color`: CSS color (e.g., `%23FF0000` for red, leave empty for recolorable SVG)
 
@@ -36,7 +35,7 @@ curl -X POST http://localhost:8787/api/v1/render \
   -H "Content-Type: application/json" \
   -d '{
     "equations": [{"latex": "E=mc^2", "displayMode": "block"}],
-    "options": {"engine": "mathjax", "color": "#0000FF"}
+    "options": {"color": "#0000FF"}
   }'
 ```
 
@@ -62,7 +61,7 @@ curl -X POST http://localhost:8787/api/v1/validate \
 
 - **Round-trip editing**: SVG embeds original LaTeX in metadata
 - **CLI-friendly**: Plain text input/output
-- **Dual renderer**: KaTeX (fast) or MathJax (comprehensive)
+- **MathJax renderer**: Comprehensive LaTeX support with SVG output
 - **Recolorable SVG**: Leave `color` empty for SVGs that inherit theme colors
 - **Edge-deployed**: Fast global response via Cloudflare Workers
 
@@ -77,4 +76,4 @@ pnpm deploy           # Deploy to Cloudflare
 
 ## Stack
 
-- Hono + Zod + MathJax/KaTeX + Cloudflare Workers
+- Hono + Zod + MathJax + Cloudflare Workers
