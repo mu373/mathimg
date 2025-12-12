@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, DragEvent, useEffect } from 'react';
+import { useState, useCallback, useMemo, DragEvent, useEffect, ClipboardEvent } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toolbar } from './Toolbar';
 import { EquationList } from './EquationList';
@@ -90,6 +90,53 @@ export function EditorLayout() {
     }
   }, [importSvgEquations, checkSvgForDuplicates]);
 
+  const handleSvgImport = useCallback(async (content: string) => {
+    const { hasDuplicates, duplicateLabels } = await checkSvgForDuplicates(content);
+
+    if (hasDuplicates) {
+      const parsed = parseSvg(content);
+      const newLatex = parsed.equations[0]?.latex || null;
+
+      setPendingSvgContent(content);
+      setDuplicateLabels(duplicateLabels);
+      setPendingNewLatex(newLatex);
+      setImportDialogOpen(true);
+    } else {
+      await importSvgEquations(content);
+    }
+  }, [importSvgEquations, checkSvgForDuplicates]);
+
+  const handlePaste = useCallback(async (e: ClipboardEvent<HTMLDivElement>) => {
+    // Check for SVG file in clipboard
+    const items = Array.from(e.clipboardData.items);
+
+    // Look for SVG file
+    const svgFileItem = items.find(
+      item => item.type === 'image/svg+xml' || item.kind === 'file'
+    );
+
+    if (svgFileItem?.kind === 'file') {
+      const file = svgFileItem.getAsFile();
+      if (file && (file.type === 'image/svg+xml' || file.name?.endsWith('.svg'))) {
+        e.preventDefault();
+        const content = await file.text();
+        await handleSvgImport(content);
+        return;
+      }
+    }
+
+    // Check for SVG text content in clipboard
+    const textItem = items.find(item => item.type === 'text/plain');
+    if (textItem) {
+      const text = e.clipboardData.getData('text/plain');
+      // Check if the text looks like SVG
+      if (text.trim().startsWith('<svg') || text.trim().startsWith('<?xml')) {
+        e.preventDefault();
+        await handleSvgImport(text);
+      }
+    }
+  }, [handleSvgImport]);
+
   const handleImportOverwrite = useCallback(async () => {
     if (pendingSvgContent) {
       await importSvgEquations(pendingSvgContent, true);
@@ -140,6 +187,7 @@ export function EditorLayout() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onPaste={handlePaste}
     >
       <Toolbar />
       <div className="flex-1 overflow-hidden">
