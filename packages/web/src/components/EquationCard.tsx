@@ -18,56 +18,24 @@ export const EquationCard = forwardRef<HTMLDivElement, EquationCardProps>(
     const handleCopySvg = async () => {
       if (!svg) return;
       try {
-        // Check if Clipboard API with write is available
-        if (!navigator.clipboard || !navigator.clipboard.write) {
-          toast({
-            title: 'Copy not supported',
-            description: 'Your browser does not support copying images',
-            variant: 'destructive'
-          });
-          return;
+        // Check if browser supports SVG in clipboard (Chrome 124+, Edge 124+)
+        const supportsSvgClipboard =
+          'ClipboardItem' in window &&
+          'supports' in ClipboardItem &&
+          ClipboardItem.supports('image/svg+xml');
+
+        if (supportsSvgClipboard) {
+          // Copy as SVG image with metadata preserved
+          const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/svg+xml': svgBlob })
+          ]);
+          toast({ title: 'SVG copied to clipboard' });
+        } else {
+          // Fallback: copy as text for older browsers
+          await navigator.clipboard.writeText(svg);
+          toast({ title: 'SVG copied as text' });
         }
-
-        // Convert SVG to PNG blob for clipboard
-        const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-
-        // Create an image from the SVG
-        const img = new Image();
-        const url = URL.createObjectURL(svgBlob);
-
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = url;
-        });
-
-        // Draw to canvas and convert to PNG
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          throw new Error('Could not get canvas context');
-        }
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(url);
-
-        // Convert canvas to blob
-        const pngBlob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error('Failed to convert canvas to blob'));
-          }, 'image/png');
-        });
-
-        // Copy to clipboard
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            'image/png': pngBlob
-          })
-        ]);
-
-        toast({ title: 'Image copied to clipboard' });
       } catch (error) {
         toast({
           title: 'Failed to copy',
