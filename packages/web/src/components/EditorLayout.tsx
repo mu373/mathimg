@@ -138,26 +138,22 @@ export function EditorLayout() {
       // Only handle Cmd+V (Mac) or Ctrl+V (Windows/Linux)
       if (!((e.metaKey || e.ctrlKey) && e.key === 'v')) return;
 
-      // Don't intercept if focus is in an input, textarea, or contenteditable
+      // Don't intercept if focus is in a regular input or textarea (not Monaco)
       const activeElement = document.activeElement;
       if (
         activeElement instanceof HTMLInputElement ||
-        activeElement instanceof HTMLTextAreaElement ||
-        activeElement?.getAttribute('contenteditable') === 'true'
+        activeElement instanceof HTMLTextAreaElement
       ) {
         return;
       }
 
-      // Don't intercept if focus is in Monaco editor
-      if (activeElement?.closest('.monaco-editor')) {
-        return;
-      }
-
+      // Check clipboard for SVG - only intercept if SVG is found
       const svgContent = await readSvgFromClipboard();
       if (svgContent) {
         e.preventDefault();
         await handleSvgImport(svgContent);
       }
+      // If no SVG, let the default paste behavior happen (e.g., paste text in Monaco)
     };
 
     window.addEventListener('keydown', handleKeyDown);
