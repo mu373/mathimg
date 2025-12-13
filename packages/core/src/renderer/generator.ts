@@ -30,6 +30,15 @@ export interface GenerateSVGResult {
   errors: string[];
 }
 
+function escapeXmlAttribute(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 export function generateSVG(input: GenerateSVGOptions): GenerateSVGResult {
   const renderer = new MathJaxRenderer();
   const errors: string[] = [];
@@ -111,9 +120,10 @@ export function generateSVG(input: GenerateSVGOptions): GenerateSVGResult {
 
       // Handle color override
       if (input.options?.color) {
+        const escapedColor = escapeXmlAttribute(input.options.color);
         svgInnerContent = svgInnerContent
-          .replace(/stroke="black"/g, `stroke="${input.options.color}"`)
-          .replace(/fill="black"/g, `fill="${input.options.color}"`);
+          .replace(/stroke="black"/g, `stroke="${escapedColor}"`)
+          .replace(/fill="black"/g, `fill="${escapedColor}"`);
       } else {
         // Remove hardcoded colors to allow CSS/inheritance control
         svgInnerContent = svgInnerContent
@@ -139,16 +149,7 @@ export function generateSVG(input: GenerateSVGOptions): GenerateSVGResult {
 
       processedEquations.push(equation);
 
-      const escapeXmlAttribute = (str: string) => {
-        return str
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&apos;');
-      };
-
-      const colorStyle = input.options?.color ? ` fill="${input.options.color}"` : '';
+      const colorStyle = input.options?.color ? ` fill="${escapeXmlAttribute(input.options.color)}"` : '';
 
       let svgGroup: string;
       if (isTaggedEquation) {
@@ -158,7 +159,7 @@ export function generateSVG(input: GenerateSVGOptions): GenerateSVGResult {
      data-role="latex-equation"
      data-equation-id="${equationId}"
      data-latex="${escapeXmlAttribute(eqInput.latex)}"
-     data-display-mode="${equation.displayMode}"
+     data-display-mode="${escapeXmlAttribute(equation.displayMode)}"
      transform="translate(${padding}, ${currentY})"${colorStyle}>
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
       ${svgInnerContent}
@@ -170,7 +171,7 @@ export function generateSVG(input: GenerateSVGOptions): GenerateSVGResult {
      data-role="latex-equation"
      data-equation-id="${equationId}"
      data-latex="${escapeXmlAttribute(eqInput.latex)}"
-     data-display-mode="${equation.displayMode}"
+     data-display-mode="${escapeXmlAttribute(equation.displayMode)}"
      transform="translate(${padding}, ${currentY})"${colorStyle}>
     <svg viewBox="${viewBox}" width="${width}" height="${height}">
       ${svgInnerContent}

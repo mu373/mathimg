@@ -43,8 +43,17 @@ export function createMetadata(options: CreateMetadataOptions): RendererMetadata
   };
 }
 
+function escapeXmlContent(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function serializeMetadata(metadata: RendererMetadata): string {
-  return JSON.stringify(metadata, null, 2)
+  const json = JSON.stringify(metadata, null, 2);
+  const escaped = escapeXmlContent(json);
+  return escaped
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
