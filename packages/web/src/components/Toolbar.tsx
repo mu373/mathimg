@@ -12,48 +12,11 @@ import {
   MenubarTrigger,
 } from './ui/menubar';
 import { TabBar } from './TabBar';
+import SAMPLE_DOCUMENT from '../sample-document.txt?raw';
 
 interface ToolbarProps {
   onImportSvgFromClipboard: () => Promise<string | null>;
 }
-
-const SAMPLE_DOCUMENT = String.raw`% Frontmatter (optional)
-
-% Set variables with define.*
-define.highlight: rgba(255, 0, 102, 1)
-
-% Or you can also set global color
-% color: blue
-
----
-% Use --- to split equation images
-
-E = mc^2
-\label{eq:energy}
-
----
-
-\int_{-\infty}^{\infty} e^{-x^2} dx = \color{highlight} \sqrt{\pi}
-\label{eq:gaussian}
-
----
-
-\mathbf{F} = m\mathbf{a}
-\label{eq:newton}
-
----
-
-% Use \\ for line breaks within aligned environment
-\begin{aligned}
-x &= 1 \\
-y &= 2 \\
-z &= 3
-\end{aligned}
-\label{eq:multiline}
-
----
-
-`;
 
 export function Toolbar({ onImportSvgFromClipboard }: ToolbarProps) {
   const {
