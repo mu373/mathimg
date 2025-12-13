@@ -124,6 +124,8 @@ interface EditorState {
 }
 
 const EMPTY_DOCUMENT = `---
+% Add your equations here
+% Separate equations with --- on a new line
 
 `;
 
