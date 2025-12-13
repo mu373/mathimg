@@ -47,6 +47,7 @@ export function EditorLayout() {
   const [pendingSvgContent, setPendingSvgContent] = useState<string | null>(null);
   const [duplicateLabels, setDuplicateLabels] = useState<string[]>([]);
   const [pendingNewLatex, setPendingNewLatex] = useState<string | null>(null);
+  const [pendingNewId, setPendingNewId] = useState<string | null>(null);
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -76,13 +77,15 @@ export function EditorLayout() {
       const { hasDuplicates, duplicateLabels } = await checkSvgForDuplicates(content);
 
       if (hasDuplicates) {
-        // Parse the SVG to get the new equation's latex
+        // Parse the SVG to get the new equation's latex and id
         const parsed = parseSvg(content);
         const newLatex = parsed.equations[0]?.latex || null;
+        const newId = parsed.equations[0]?.id || null;
 
         setPendingSvgContent(content);
         setDuplicateLabels(duplicateLabels);
         setPendingNewLatex(newLatex);
+        setPendingNewId(newId);
         setImportDialogOpen(true);
       } else {
         await importSvgEquations(content);
@@ -96,10 +99,12 @@ export function EditorLayout() {
     if (hasDuplicates) {
       const parsed = parseSvg(content);
       const newLatex = parsed.equations[0]?.latex || null;
+      const newId = parsed.equations[0]?.id || null;
 
       setPendingSvgContent(content);
       setDuplicateLabels(duplicateLabels);
       setPendingNewLatex(newLatex);
+      setPendingNewId(newId);
       setImportDialogOpen(true);
     } else {
       await importSvgEquations(content);
@@ -180,6 +185,7 @@ export function EditorLayout() {
     setPendingSvgContent(null);
     setDuplicateLabels([]);
     setPendingNewLatex(null);
+    setPendingNewId(null);
   }, [pendingSvgContent, importSvgEquations]);
 
   const handleImportCancel = useCallback(() => {
@@ -187,13 +193,14 @@ export function EditorLayout() {
     setPendingSvgContent(null);
     setDuplicateLabels([]);
     setPendingNewLatex(null);
+    setPendingNewId(null);
   }, []);
 
-  // Get current equation's latex for the duplicate label
-  const currentEquationLatex = useMemo(() => {
+  // Get current equation's latex and id for the duplicate label
+  const currentEquationData = useMemo(() => {
     if (duplicateLabels.length === 0) return null;
     const existing = parsedEquations.find(eq => eq.label === duplicateLabels[0]);
-    return existing?.latex || null;
+    return existing ? { latex: existing.latex, id: existing.id } : null;
   }, [duplicateLabels, parsedEquations]);
 
   // Generate preview SVGs for comparison - renders fresh from current LaTeX text
@@ -212,10 +219,10 @@ export function EditorLayout() {
     };
 
     return {
-      current: renderPreview(currentEquationLatex),
+      current: renderPreview(currentEquationData?.latex || null),
       new: renderPreview(pendingNewLatex),
     };
-  }, [currentEquationLatex, pendingNewLatex]);
+  }, [currentEquationData, pendingNewLatex]);
 
   return (
     <div
@@ -285,7 +292,12 @@ export function EditorLayout() {
           {previewSvgs && (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Current</p>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Current</p>
+                  {currentEquationData?.id && (
+                    <p className="text-xs font-mono text-muted-foreground/70">{currentEquationData.id}</p>
+                  )}
+                </div>
                 <div className="border rounded p-4 bg-muted/30 flex items-center justify-center min-h-[60px] overflow-hidden">
                   {previewSvgs.current ? (
                     <div className="scale-[0.6]" dangerouslySetInnerHTML={{ __html: previewSvgs.current }} />
@@ -295,7 +307,12 @@ export function EditorLayout() {
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">New</p>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">New</p>
+                  {pendingNewId && (
+                    <p className="text-xs font-mono text-muted-foreground/70">{pendingNewId}</p>
+                  )}
+                </div>
                 <div className="border rounded p-4 bg-muted/30 flex items-center justify-center min-h-[60px] overflow-hidden">
                   {previewSvgs.new ? (
                     <div className="scale-[0.6]" dangerouslySetInnerHTML={{ __html: previewSvgs.new }} />
