@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter @mathedit/web dev",
-    "dev:api": "pnpm --filter @mathedit/api dev",
+    "dev": "pnpm --filter @mathedit/web-standalone dev",
     "build": "pnpm -r build",
-    "deploy:api": "pnpm --filter @mathedit/api deploy",
-    "type-check": "pnpm -r type-check"
+    "build:web": "pnpm --filter @mathedit/web-standalone build",
+    "build:native": "pnpm --filter @mathedit/web-native build && pnpm copy:native",
+    "copy:native": "rm -rf MathEdit/MathEdit/web && cp -r packages/web-native/dist MathEdit/MathEdit/web",
+    "type-check": "pnpm -r type-check",
+    "clean": "pnpm -r clean && rm -rf node_modules"
   },
   "packageManager": "pnpm@9.15.0"
 }
