@@ -1,6 +1,106 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Drop Zone Overlay (AppKit-based to work over WKWebView)
+struct DropZoneOverlay: NSViewRepresentable {
+    @Binding var isDragging: Bool
+    let onDrop: (String) -> Void
+
+    func makeNSView(context: Context) -> DropZoneNSView {
+        let view = DropZoneNSView()
+        view.onDragStateChanged = { isDragging in
+            DispatchQueue.main.async {
+                self.isDragging = isDragging
+            }
+        }
+        view.onFileDrop = onDrop
+        return view
+    }
+
+    func updateNSView(_ nsView: DropZoneNSView, context: Context) {}
+}
+
+class DropZoneNSView: NSView {
+    var onDragStateChanged: ((Bool) -> Void)?
+    var onFileDrop: ((String) -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([.fileURL, .init("public.svg-image")])
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerForDraggedTypes([.fileURL, .init("public.svg-image")])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if hasSVGFile(sender) {
+            onDragStateChanged?(true)
+            return .copy
+        }
+        return []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return hasSVGFile(sender) ? .copy : []
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDragStateChanged?(false)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        onDragStateChanged?(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        onDragStateChanged?(false)
+
+        guard let items = sender.draggingPasteboard.pasteboardItems else { return false }
+
+        for item in items {
+            // Try file URL first
+            if let urlString = item.string(forType: .fileURL),
+               let url = URL(string: urlString),
+               url.pathExtension.lowercased() == "svg",
+               let content = try? String(contentsOf: url, encoding: .utf8) {
+                onFileDrop?(content)
+                return true
+            }
+
+            // Try direct SVG data
+            if let svgData = item.data(forType: .init("public.svg-image")),
+               let content = String(data: svgData, encoding: .utf8) {
+                onFileDrop?(content)
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func hasSVGFile(_ sender: NSDraggingInfo) -> Bool {
+        guard let items = sender.draggingPasteboard.pasteboardItems else { return false }
+        for item in items {
+            if let urlString = item.string(forType: .fileURL),
+               let url = URL(string: urlString),
+               url.pathExtension.lowercased() == "svg" {
+                return true
+            }
+            if item.data(forType: .init("public.svg-image")) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    // Pass through mouse events so the content beneath remains interactive
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
+    }
+}
+
 // MARK: - Import Dialog View
 struct ImportDialogView: View {
     let duplicateLabel: String
@@ -158,11 +258,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .copyEquationSVG)) { _ in
             copySelectedSVGToClipboard()
         }
-        .onDrop(of: [.svg, .fileURL], isTargeted: $isDragging) { providers in
-            handleDrop(providers: providers)
-        }
 
-            // Drag overlay
+            // AppKit-based drop zone overlay (works over WKWebView)
+            DropZoneOverlay(isDragging: $isDragging) { svgContent in
+                processSvgImport(svgContent)
+            }
+
+            // Visual drag overlay
             if isDragging {
                 VStack {
                     Spacer()
@@ -183,6 +285,7 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.accentColor.opacity(0.1))
+                .allowsHitTesting(false)
             }
         }
         .sheet(isPresented: $showImportDialog) {
@@ -389,36 +492,6 @@ struct ContentView: View {
     private var highlightedEquationId: String? {
         guard let line = cursorLine else { return selectedEquationId }
         return document.equations.first { $0.startLine <= line && line <= $0.endLine }?.id ?? selectedEquationId
-    }
-
-    private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        for provider in providers {
-            // Handle SVG files directly
-            if provider.hasItemConformingToTypeIdentifier(UTType.svg.identifier) {
-                provider.loadDataRepresentation(forTypeIdentifier: UTType.svg.identifier) { data, error in
-                    guard let data = data, let svgContent = String(data: data, encoding: .utf8) else { return }
-                    DispatchQueue.main.async {
-                        processSvgImport(svgContent)
-                    }
-                }
-                return true
-            }
-
-            // Handle file URLs (for files dragged from Finder)
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-                    guard let data = item as? Data,
-                          let url = URL(dataRepresentation: data, relativeTo: nil),
-                          url.pathExtension.lowercased() == "svg",
-                          let svgContent = try? String(contentsOf: url, encoding: .utf8) else { return }
-                    DispatchQueue.main.async {
-                        processSvgImport(svgContent)
-                    }
-                }
-                return true
-            }
-        }
-        return false
     }
 
     private func processSvgImport(_ svgContent: String) {

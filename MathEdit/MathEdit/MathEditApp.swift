@@ -81,6 +81,7 @@ extension Notification.Name {
     static let exportAllSVGs = Notification.Name("exportAllSVGs")
     static let copyEquationSVG = Notification.Name("copyEquationSVG")
     static let documentImported = Notification.Name("documentImported")
+    static let importSvgFromWeb = Notification.Name("importSvgFromWeb")
 }
 
 // MARK: - Settings View

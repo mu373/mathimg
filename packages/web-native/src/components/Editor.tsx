@@ -1,9 +1,67 @@
 import MonacoEditor from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
+import { useRef, useEffect, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
+import { importSvg, isRunningInNative } from '../bridge/native-bridge';
 
 export function Editor() {
   const { document, setDocument, setEditorInstance, handleCursorChange } = useEditorStore();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Handle drag and drop for SVG files
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer?.types.includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only set dragging to false if we're leaving the container
+      const relatedTarget = e.relatedTarget as Node | null;
+      if (!container.contains(relatedTarget)) {
+        setIsDragging(false);
+      }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      for (const file of Array.from(files)) {
+        if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+          const content = await file.text();
+          if (isRunningInNative()) {
+            importSvg(content);
+          } else {
+            console.log('[Editor] SVG dropped (non-native):', file.name);
+          }
+        }
+      }
+    };
+
+    container.addEventListener('dragover', handleDragOver);
+    container.addEventListener('dragleave', handleDragLeave);
+    container.addEventListener('drop', handleDrop);
+
+    return () => {
+      container.removeEventListener('dragover', handleDragOver);
+      container.removeEventListener('dragleave', handleDragLeave);
+      container.removeEventListener('drop', handleDrop);
+    };
+  }, []);
 
   const handleEditorMount: OnMount = (editor, monaco) => {
     // Store editor instance
@@ -104,22 +162,53 @@ export function Editor() {
   };
 
   return (
-    <MonacoEditor
-      height="100%"
-      defaultLanguage="latex-custom"
-      value={document}
-      onChange={(value) => setDocument(value || '')}
-      onMount={handleEditorMount}
-      theme="latex-light"
-      options={{
-        minimap: { enabled: false },
-        fontSize: 14,
-        wordWrap: 'on',
-        lineNumbers: 'on',
-        scrollBeyondLastLine: false,
-        padding: { top: 16, bottom: 16 },
-        automaticLayout: true,
-      }}
-    />
+    <div ref={containerRef} style={{ height: '100%', position: 'relative' }}>
+      <MonacoEditor
+        height="100%"
+        defaultLanguage="latex-custom"
+        value={document}
+        onChange={(value) => setDocument(value || '')}
+        onMount={handleEditorMount}
+        theme="latex-light"
+        options={{
+          minimap: { enabled: false },
+          fontSize: 14,
+          wordWrap: 'on',
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          padding: { top: 16, bottom: 16 },
+          automaticLayout: true,
+        }}
+      />
+      {isDragging && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 122, 255, 0.1)',
+            border: '2px dashed rgba(0, 122, 255, 0.5)',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              padding: '16px 24px',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+            }}
+          >
+            Drop SVG to import
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

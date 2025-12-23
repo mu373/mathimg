@@ -42,6 +42,7 @@ struct EditorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "cursorPositionChanged")
         contentController.add(context.coordinator, name: "requestRender")
         contentController.add(context.coordinator, name: "ready")
+        contentController.add(context.coordinator, name: "importSvg")
 
         // Allow local file access
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
@@ -213,6 +214,19 @@ struct EditorWebView: NSViewRepresentable {
                     let equations = equationsData.compactMap { parseEquation($0) }
                     let frontmatter = parseFrontmatter(body["frontmatter"] as? [String: Any])
                     RenderService.shared.render(equations: equations, frontmatter: frontmatter, document: parent.document)
+                }
+
+            case "importSvg":
+                // Handle SVG dropped on editor
+                if let body = message.body as? [String: Any],
+                   let svgContent = body["svgContent"] as? String {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(
+                            name: .importSvgFromWeb,
+                            object: nil,
+                            userInfo: ["svgContent": svgContent]
+                        )
+                    }
                 }
 
             default:

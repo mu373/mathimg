@@ -33,6 +33,9 @@ export interface WebToNativeMessages {
     frontmatter: DocumentFrontmatter;
   };
   ready: void;
+  importSvg: {
+    svgContent: string;
+  };
 }
 
 // Extend window with native bridge types

@@ -74,3 +74,10 @@ export function requestRender(
 ): void {
   sendToNative('requestRender', { equations, frontmatter });
 }
+
+/**
+ * Import SVG file dropped on editor
+ */
+export function importSvg(svgContent: string): void {
+  sendToNative('importSvg', { svgContent });
+}
