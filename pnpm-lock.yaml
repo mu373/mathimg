@@ -42,7 +42,7 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       '@typescript-eslint/eslint-plugin':
-        specifier: ^8.49.0
+        specifier: ^8.50.0
         version: 8.50.1(@typescript-eslint/parser@8.50.1(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       '@typescript-eslint/parser':
         specifier: ^8.49.0
@@ -60,7 +60,7 @@ importers:
         specifier: ^4.0.15
         version: 4.0.16(@types/node@25.0.3)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2)
       wrangler:
-        specifier: ^4.54.0
+        specifier: ^4.56.0
         version: 4.56.0(@cloudflare/workers-types@4.20251223.0)
 
   packages/core:
@@ -201,7 +201,7 @@ importers:
         specifier: ^5.1.2
         version: 5.1.2(vite@7.3.0(@types/node@25.0.3)(jiti@2.6.1)(lightningcss@1.30.2)(yaml@2.8.2))
       autoprefixer:
-        specifier: ^10.4.22
+        specifier: ^10.4.23
         version: 10.4.23(postcss@8.5.6)
       monaco-editor:
         specifier: ^0.55.1
