@@ -99,4 +99,75 @@ final class MathEditDocument: ReferenceFileDocument {
             lastRenderedLatex[equationId] = equations[index].latex
         }
     }
+
+    /// Check if SVG contains duplicate equations
+    func checkSvgForDuplicates(_ svgContent: String) -> (hasDuplicates: Bool, duplicateLabels: [String]) {
+        let result = parseSvg(svgContent)
+        let existingIds = Set(equations.map { $0.id })
+        let duplicates = result.equations.filter { existingIds.contains($0.id) }
+        return (hasDuplicates: !duplicates.isEmpty, duplicateLabels: duplicates.map { $0.label })
+    }
+
+    /// Import equations from SVG content
+    func importSvgEquations(_ svgContent: String, overwrite: Bool = false) {
+        let result = parseSvg(svgContent)
+        guard !result.equations.isEmpty else { return }
+
+        let existingIds = Set(equations.map { $0.id })
+        var newDoc = projectData.document
+
+        for eq in result.equations {
+            // Ensure latex has a label
+            let hasLabel = eq.latex.contains("\\label{")
+            let latexWithLabel = hasLabel ? eq.latex : "\(eq.latex)\n\\label{\(eq.label)}"
+
+            if existingIds.contains(eq.id) && overwrite {
+                // Find and replace existing equation
+                if let existingEq = equations.first(where: { $0.id == eq.id }) {
+                    var lines = newDoc.components(separatedBy: "\n")
+
+                    // Find separator before equation
+                    var separatorLine = existingEq.startLine - 1
+                    while separatorLine >= 0 && lines[separatorLine].trimmingCharacters(in: .whitespaces).isEmpty {
+                        separatorLine -= 1
+                    }
+
+                    let hasSeparatorBefore = separatorLine >= 0 &&
+                        lines[separatorLine].trimmingCharacters(in: .whitespaces).hasPrefix("---")
+                    let startReplaceLine = hasSeparatorBefore ? separatorLine : existingEq.startLine
+
+                    // Find separator after equation
+                    var afterLine = existingEq.endLine + 1
+                    while afterLine < lines.count && lines[afterLine].trimmingCharacters(in: .whitespaces).isEmpty {
+                        afterLine += 1
+                    }
+                    let hasSeparatorAfter = afterLine < lines.count &&
+                        lines[afterLine].trimmingCharacters(in: .whitespaces).hasPrefix("---")
+                    let endReplaceLine = hasSeparatorAfter ? afterLine : existingEq.endLine
+
+                    let beforeLines = Array(lines[0..<startReplaceLine])
+                    let afterLines = afterLine < lines.count ? Array(lines[(endReplaceLine + 1)...]) : []
+
+                    let replacement = hasSeparatorBefore
+                        ? ["---", "", latexWithLabel, ""]
+                        : [latexWithLabel]
+
+                    lines = beforeLines + replacement + afterLines
+                    newDoc = lines.joined(separator: "\n")
+                }
+            } else if !existingIds.contains(eq.id) {
+                // Append new equation
+                if !newDoc.hasSuffix("\n\n") {
+                    if newDoc.hasSuffix("\n") {
+                        newDoc += "\n"
+                    } else {
+                        newDoc += "\n\n"
+                    }
+                }
+                newDoc += "---\n\n\(latexWithLabel)\n\n"
+            }
+        }
+
+        updateDocument(newDoc)
+    }
 }

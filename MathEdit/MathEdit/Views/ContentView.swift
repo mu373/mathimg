@@ -1,13 +1,19 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @ObservedObject var document: MathEditDocument
     @State private var selectedEquationId: String?
     @State private var cursorLine: Int?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isDragging = false
+    @State private var showImportDialog = false
+    @State private var pendingSvgContent: String?
+    @State private var duplicateLabels: [String] = []
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        ZStack {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 equations: document.equations,
                 selectedEquationId: $selectedEquationId,
@@ -62,6 +68,48 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .copyEquationSVG)) { _ in
             copySelectedSVGToClipboard()
+        }
+        .onDrop(of: [.svg, .fileURL], isTargeted: $isDragging) { providers in
+            handleDrop(providers: providers)
+        }
+
+            // Drag overlay
+            if isDragging {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 12) {
+                            Image(systemName: "arrow.down.doc")
+                                .font(.system(size: 48))
+                            Text("Drop SVG file to import")
+                                .font(.headline)
+                        }
+                        .padding(32)
+                        .background(.regularMaterial)
+                        .cornerRadius(16)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.accentColor.opacity(0.1))
+            }
+        }
+        .alert("Equation already exists", isPresented: $showImportDialog) {
+            Button("Cancel", role: .cancel) {
+                pendingSvgContent = nil
+                duplicateLabels = []
+            }
+            Button("Overwrite") {
+                if let svg = pendingSvgContent {
+                    document.importSvgEquations(svg, overwrite: true)
+                }
+                pendingSvgContent = nil
+                duplicateLabels = []
+            }
+        } message: {
+            Text("\"\(duplicateLabels.first ?? "")\" already exists. Do you want to overwrite it?")
         }
     }
 
@@ -144,6 +192,48 @@ struct ContentView: View {
     private var highlightedEquationId: String? {
         guard let line = cursorLine else { return selectedEquationId }
         return document.equations.first { $0.startLine <= line && line <= $0.endLine }?.id ?? selectedEquationId
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        for provider in providers {
+            // Handle SVG files directly
+            if provider.hasItemConformingToTypeIdentifier(UTType.svg.identifier) {
+                provider.loadDataRepresentation(forTypeIdentifier: UTType.svg.identifier) { data, error in
+                    guard let data = data, let svgContent = String(data: data, encoding: .utf8) else { return }
+                    DispatchQueue.main.async {
+                        processSvgImport(svgContent)
+                    }
+                }
+                return true
+            }
+
+            // Handle file URLs (for files dragged from Finder)
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                    guard let data = item as? Data,
+                          let url = URL(dataRepresentation: data, relativeTo: nil),
+                          url.pathExtension.lowercased() == "svg",
+                          let svgContent = try? String(contentsOf: url, encoding: .utf8) else { return }
+                    DispatchQueue.main.async {
+                        processSvgImport(svgContent)
+                    }
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    private func processSvgImport(_ svgContent: String) {
+        let (hasDuplicates, labels) = document.checkSvgForDuplicates(svgContent)
+
+        if hasDuplicates {
+            pendingSvgContent = svgContent
+            duplicateLabels = labels
+            showImportDialog = true
+        } else {
+            document.importSvgEquations(svgContent)
+        }
     }
 }
 
