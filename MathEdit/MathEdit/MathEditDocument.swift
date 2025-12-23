@@ -169,5 +169,10 @@ final class MathEditDocument: ReferenceFileDocument {
         }
 
         updateDocument(newDoc)
+
+        // Notify that document was imported (triggers editor sync)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .documentImported, object: nil)
+        }
     }
 }

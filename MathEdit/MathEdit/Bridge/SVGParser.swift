@@ -12,6 +12,16 @@ struct SVGParseResult {
     let errors: [String]
 }
 
+/// Unescape XML entities in a string
+private func unescapeXML(_ str: String) -> String {
+    return str
+        .replacingOccurrences(of: "&lt;", with: "<")
+        .replacingOccurrences(of: "&gt;", with: ">")
+        .replacingOccurrences(of: "&quot;", with: "\"")
+        .replacingOccurrences(of: "&apos;", with: "'")
+        .replacingOccurrences(of: "&amp;", with: "&") // Must be last
+}
+
 /// Parse SVG content to extract LaTeX equations from metadata
 /// Mirrors the logic in packages/core/src/svg/parser.ts
 func parseSvg(_ svgContent: String) -> SVGParseResult {
@@ -19,79 +29,70 @@ func parseSvg(_ svgContent: String) -> SVGParseResult {
     var equations: [ImportedEquation] = []
 
     // Try to extract metadata block first
-    let metadataPattern = #"<metadata[^>]*?id="latex-equations"[^>]*?>([\s\S]*?)</metadata>"#
-    if let metadataMatch = svgContent.range(of: metadataPattern, options: .regularExpression) {
-        let fullMatch = String(svgContent[metadataMatch])
+    // Use NSRegularExpression for proper multiline matching
+    let metadataPattern = #"<metadata[^>]*id="latex-equations"[^>]*>(.*?)</metadata>"#
+    if let regex = try? NSRegularExpression(pattern: metadataPattern, options: .dotMatchesLineSeparators),
+       let match = regex.firstMatch(in: svgContent, options: [], range: NSRange(svgContent.startIndex..., in: svgContent)),
+       match.numberOfRanges > 1,
+       let contentRange = Range(match.range(at: 1), in: svgContent) {
 
-        // Extract the JSON content inside the metadata tag
-        if let jsonStart = fullMatch.range(of: ">"),
-           let jsonEnd = fullMatch.range(of: "</metadata>") {
-            let jsonContent = String(fullMatch[jsonStart.upperBound..<jsonEnd.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonContent = String(svgContent[contentRange]).trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if let jsonData = jsonContent.data(using: .utf8) {
-                do {
-                    if let metadata = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                       let equationsArray = metadata["equations"] as? [[String: Any]] {
-                        for (index, eq) in equationsArray.enumerated() {
-                            let id = eq["id"] as? String ?? UUID().uuidString
-                            let latex = eq["latex"] as? String ?? ""
-                            let label = eq["label"] as? String ?? "imported\(index + 1)"
-                            equations.append(ImportedEquation(id: id, latex: latex, label: label))
-                        }
-                        return SVGParseResult(hasMetadata: true, equations: equations, errors: [])
+        // Unescape XML entities before parsing JSON
+        let unescapedJSON = unescapeXML(jsonContent)
+
+        if let jsonData = unescapedJSON.data(using: .utf8) {
+            do {
+                if let metadata = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                   let equationsArray = metadata["equations"] as? [[String: Any]] {
+                    for (index, eq) in equationsArray.enumerated() {
+                        let id = eq["id"] as? String ?? UUID().uuidString
+                        let latex = eq["latex"] as? String ?? ""
+                        let label = eq["label"] as? String ?? "imported\(index + 1)"
+                        equations.append(ImportedEquation(id: id, latex: latex, label: label))
                     }
-                } catch {
-                    errors.append("Failed to parse metadata JSON: \(error.localizedDescription)")
+                    return SVGParseResult(hasMetadata: true, equations: equations, errors: [])
                 }
+            } catch {
+                errors.append("Failed to parse metadata JSON: \(error.localizedDescription)")
             }
         }
     }
 
     // Fallback: try to extract from data attributes on groups
-    let groupPattern = #"<g[^>]*?data-role="latex-equation"[^>]*?>"#
-    let regex = try? NSRegularExpression(pattern: groupPattern, options: [])
-    let range = NSRange(svgContent.startIndex..., in: svgContent)
+    let groupPattern = #"<g[^>]*data-role="latex-equation"[^>]*>"#
+    if let regex = try? NSRegularExpression(pattern: groupPattern, options: []) {
+        let range = NSRange(svgContent.startIndex..., in: svgContent)
 
-    regex?.enumerateMatches(in: svgContent, options: [], range: range) { match, _, _ in
-        guard let matchRange = match?.range, let swiftRange = Range(matchRange, in: svgContent) else { return }
-        let groupTag = String(svgContent[swiftRange])
+        regex.enumerateMatches(in: svgContent, options: [], range: range) { match, _, _ in
+            guard let matchRange = match?.range, let swiftRange = Range(matchRange, in: svgContent) else { return }
+            let groupTag = String(svgContent[swiftRange])
 
-        // Extract data-latex attribute
-        let latexPattern = #"data-latex="([^"]+)""#
-        if let latexMatch = groupTag.range(of: latexPattern, options: .regularExpression) {
-            let fullLatexMatch = String(groupTag[latexMatch])
-            if let valueStart = fullLatexMatch.range(of: "=\""),
-               let valueEnd = fullLatexMatch.lastIndex(of: "\"") {
-                var latex = String(fullLatexMatch[valueStart.upperBound..<valueEnd])
+            // Extract data-equation-id attribute
+            var id = UUID().uuidString
+            if let idRegex = try? NSRegularExpression(pattern: #"data-equation-id="([^"]+)""#),
+               let idMatch = idRegex.firstMatch(in: groupTag, range: NSRange(groupTag.startIndex..., in: groupTag)),
+               idMatch.numberOfRanges > 1,
+               let idRange = Range(idMatch.range(at: 1), in: groupTag) {
+                id = String(groupTag[idRange])
+            }
+
+            // Extract data-latex attribute
+            if let latexRegex = try? NSRegularExpression(pattern: #"data-latex="([^"]+)""#),
+               let latexMatch = latexRegex.firstMatch(in: groupTag, range: NSRange(groupTag.startIndex..., in: groupTag)),
+               latexMatch.numberOfRanges > 1,
+               let latexRange = Range(latexMatch.range(at: 1), in: groupTag) {
 
                 // Decode HTML entities
-                latex = latex
-                    .replacingOccurrences(of: "&quot;", with: "\"")
-                    .replacingOccurrences(of: "&amp;", with: "&")
-                    .replacingOccurrences(of: "&lt;", with: "<")
-                    .replacingOccurrences(of: "&gt;", with: ">")
-                    .replacingOccurrences(of: "&apos;", with: "'")
-
-                // Extract ID
-                let idPattern = #"data-equation-id="([^"]+)""#
-                var id = UUID().uuidString
-                if let idMatch = groupTag.range(of: idPattern, options: .regularExpression) {
-                    let fullIdMatch = String(groupTag[idMatch])
-                    if let idStart = fullIdMatch.range(of: "=\""),
-                       let idEnd = fullIdMatch.lastIndex(of: "\"") {
-                        id = String(fullIdMatch[idStart.upperBound..<idEnd])
-                    }
-                }
+                let latex = unescapeXML(String(groupTag[latexRange]))
 
                 // Extract label from latex
-                let labelPattern = #"\\label\{([\w:.-]+)\}"#
                 var label = "imported\(equations.count + 1)"
-                if let labelMatch = latex.range(of: labelPattern, options: .regularExpression) {
-                    let fullLabelMatch = String(latex[labelMatch])
-                    if let labelStart = fullLabelMatch.range(of: "{"),
-                       let labelEnd = fullLabelMatch.lastIndex(of: "}") {
-                        label = String(fullLabelMatch[labelStart.upperBound..<labelEnd])
-                    }
+                if let labelRegex = try? NSRegularExpression(pattern: #"\\label\{([\w:.-]+)\}"#),
+                   let labelMatch = labelRegex.firstMatch(in: latex, range: NSRange(latex.startIndex..., in: latex)),
+                   labelMatch.numberOfRanges > 1,
+                   let labelRange = Range(labelMatch.range(at: 1), in: latex) {
+                    label = String(latex[labelRange])
                 }
 
                 equations.append(ImportedEquation(id: id, latex: latex, label: label))

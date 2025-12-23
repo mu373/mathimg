@@ -96,6 +96,7 @@ struct EditorWebView: NSViewRepresentable {
         var lastDocumentContent: String?
         var isReady = false
         private var addEquationObserver: NSObjectProtocol?
+        private var documentImportedObserver: NSObjectProtocol?
 
         init(_ parent: EditorWebView) {
             self.parent = parent
@@ -109,10 +110,22 @@ struct EditorWebView: NSViewRepresentable {
             ) { [weak self] _ in
                 self?.addEquation()
             }
+
+            // Listen for documentImported notification
+            documentImportedObserver = NotificationCenter.default.addObserver(
+                forName: .documentImported,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.forceSyncDocumentToWeb()
+            }
         }
 
         deinit {
             if let observer = addEquationObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = documentImportedObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
         }
@@ -120,6 +133,12 @@ struct EditorWebView: NSViewRepresentable {
         func addEquation() {
             guard isReady, let webView = webView else { return }
             webView.evaluateJavaScript("window.nativeAPI?.addEquation()")
+        }
+
+        func forceSyncDocumentToWeb() {
+            // Force sync by clearing lastDocumentContent
+            lastDocumentContent = nil
+            syncDocumentToWeb()
         }
 
         func syncDocumentToWeb() {
@@ -136,7 +155,8 @@ struct EditorWebView: NSViewRepresentable {
                 .replacingOccurrences(of: "'", with: "\\'")
                 .replacingOccurrences(of: "\n", with: "\\n")
 
-            let js = "window.nativeAPI?.updateDocument?.('\(escapedContent)') || (function() { const store = window.useEditorStore?.getState(); if (store) { store.editorInstance?.setValue('\(escapedContent)'); } })()"
+            // Use loadDocument which is the correct native API method
+            let js = "window.nativeAPI?.loadDocument?.({ document: '\(escapedContent)' })"
             webView.evaluateJavaScript(js)
         }
 
