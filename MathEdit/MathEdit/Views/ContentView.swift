@@ -1,6 +1,94 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Import Dialog View
+struct ImportDialogView: View {
+    let duplicateLabel: String
+    let existingSvg: String?
+    let incomingSvg: String?
+    let onCancel: () -> Void
+    let onKeepBoth: () -> Void
+    let onReplace: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Equation Already Exists")
+                .font(.headline)
+
+            Text("\"\(duplicateLabel)\" already exists in this document.")
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 24) {
+                // Existing equation preview
+                VStack(spacing: 8) {
+                    Text("Current")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    PreviewBox(svg: existingSvg)
+                }
+
+                // Incoming equation preview
+                VStack(spacing: 8) {
+                    Text("New")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    PreviewBox(svg: incomingSvg)
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel", role: .cancel) {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape)
+
+                Button("Keep Both") {
+                    onKeepBoth()
+                }
+
+                Button("Replace") {
+                    onReplace()
+                }
+                .keyboardShortcut(.return)
+            }
+            .padding(.top, 8)
+        }
+        .padding(24)
+        .frame(minWidth: 400)
+    }
+}
+
+struct PreviewBox: View {
+    let svg: String?
+
+    var body: some View {
+        Group {
+            if let svg = svg, let nsImage = svgToImage(svg) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Text("Preview unavailable")
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+            }
+        }
+        .frame(width: 150, height: 80)
+        .background(Color(nsColor: .textBackgroundColor))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    private func svgToImage(_ svg: String) -> NSImage? {
+        guard let data = svg.data(using: .utf8) else { return nil }
+        return NSImage(data: data)
+    }
+}
+
+// MARK: - Content View
 struct ContentView: View {
     @ObservedObject var document: MathEditDocument
     @State private var selectedEquationId: String?
@@ -10,6 +98,7 @@ struct ContentView: View {
     @State private var showImportDialog = false
     @State private var pendingSvgContent: String?
     @State private var duplicateLabels: [String] = []
+    @State private var incomingSvgPreview: String?
 
     var body: some View {
         ZStack {
@@ -96,21 +185,46 @@ struct ContentView: View {
                 .background(Color.accentColor.opacity(0.1))
             }
         }
-        .alert("Equation already exists", isPresented: $showImportDialog) {
-            Button("Cancel", role: .cancel) {
-                pendingSvgContent = nil
-                duplicateLabels = []
-            }
-            Button("Overwrite") {
-                if let svg = pendingSvgContent {
-                    document.importSvgEquations(svg, overwrite: true)
+        .sheet(isPresented: $showImportDialog) {
+            ImportDialogView(
+                duplicateLabel: duplicateLabels.first ?? "",
+                existingSvg: existingSvgForDuplicate,
+                incomingSvg: incomingSvgPreview,
+                onCancel: {
+                    showImportDialog = false
+                    pendingSvgContent = nil
+                    duplicateLabels = []
+                    incomingSvgPreview = nil
+                },
+                onKeepBoth: {
+                    if let svg = pendingSvgContent {
+                        document.importSvgEquations(svg, overwrite: false, keepBoth: true)
+                    }
+                    showImportDialog = false
+                    pendingSvgContent = nil
+                    duplicateLabels = []
+                    incomingSvgPreview = nil
+                },
+                onReplace: {
+                    if let svg = pendingSvgContent {
+                        document.importSvgEquations(svg, overwrite: true)
+                    }
+                    showImportDialog = false
+                    pendingSvgContent = nil
+                    duplicateLabels = []
+                    incomingSvgPreview = nil
                 }
-                pendingSvgContent = nil
-                duplicateLabels = []
-            }
-        } message: {
-            Text("\"\(duplicateLabels.first ?? "")\" already exists. Do you want to overwrite it?")
+            )
         }
+    }
+
+    /// Get the rendered SVG for the duplicate equation
+    private var existingSvgForDuplicate: String? {
+        guard let label = duplicateLabels.first,
+              let equation = document.equations.first(where: { $0.label == label }) else {
+            return nil
+        }
+        return document.renderedSVGs[equation.id]
     }
 
     private func deleteSelectedEquation() {
@@ -313,6 +427,8 @@ struct ContentView: View {
         if hasDuplicates {
             pendingSvgContent = svgContent
             duplicateLabels = labels
+            // Extract the SVG content for preview (the dropped file itself is the rendered SVG)
+            incomingSvgPreview = svgContent
             showImportDialog = true
         } else {
             document.importSvgEquations(svgContent)

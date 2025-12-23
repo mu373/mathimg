@@ -46,9 +46,11 @@ func parseSvg(_ svgContent: String) -> SVGParseResult {
                 if let metadata = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
                    let equationsArray = metadata["equations"] as? [[String: Any]] {
                     for (index, eq) in equationsArray.enumerated() {
-                        let id = eq["id"] as? String ?? UUID().uuidString
+                        let id = (eq["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
                         let latex = eq["latex"] as? String ?? ""
-                        let label = eq["label"] as? String ?? "imported\(index + 1)"
+                        // Handle nil or empty label
+                        let rawLabel = eq["label"] as? String
+                        let label = (rawLabel == nil || rawLabel!.isEmpty) ? "imported\(index + 1)" : rawLabel!
                         equations.append(ImportedEquation(id: id, latex: latex, label: label))
                     }
                     return SVGParseResult(hasMetadata: true, equations: equations, errors: [])

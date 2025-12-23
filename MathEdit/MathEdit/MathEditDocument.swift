@@ -116,7 +116,7 @@ final class MathEditDocument: ReferenceFileDocument {
     }
 
     /// Import equations from SVG content
-    func importSvgEquations(_ svgContent: String, overwrite: Bool = false) {
+    func importSvgEquations(_ svgContent: String, overwrite: Bool = false, keepBoth: Bool = false) {
         let result = parseSvg(svgContent)
         guard !result.equations.isEmpty else { return }
 
@@ -125,14 +125,30 @@ final class MathEditDocument: ReferenceFileDocument {
         var newDoc = projectData.document
 
         for eq in result.equations {
-            // Ensure latex has a label
-            let hasLabel = eq.latex.contains("\\label{")
-            let latexWithLabel = hasLabel ? eq.latex : "\(eq.latex)\n\\label{\(eq.label)}"
-
             // Check for duplicate by ID first, then by label
             let matchById = existingIds.contains(eq.id)
             let matchByLabel = existingLabels.contains(eq.label)
             let isDuplicate = matchById || matchByLabel
+
+            // Determine the label to use
+            var finalLabel = eq.label
+            var finalLatex = eq.latex
+
+            if isDuplicate && keepBoth {
+                // Generate a unique label by appending a number
+                finalLabel = generateUniqueLabel(baseLabel: eq.label, existingLabels: existingLabels)
+                // Replace the label in latex if it exists
+                if eq.latex.contains("\\label{") {
+                    finalLatex = eq.latex.replacingOccurrences(
+                        of: "\\label{\(eq.label)}",
+                        with: "\\label{\(finalLabel)}"
+                    )
+                }
+            }
+
+            // Ensure latex has a label
+            let hasLabel = finalLatex.contains("\\label{")
+            let latexWithLabel = hasLabel ? finalLatex : "\(finalLatex)\n\\label{\(finalLabel)}"
 
             if isDuplicate && overwrite {
                 // Find existing equation to replace (by ID first, then by label)
@@ -171,16 +187,26 @@ final class MathEditDocument: ReferenceFileDocument {
                     lines = beforeLines + replacement + afterLines
                     newDoc = lines.joined(separator: "\n")
                 }
-            } else if !isDuplicate {
-                // Append new equation
-                if !newDoc.hasSuffix("\n\n") {
-                    if newDoc.hasSuffix("\n") {
-                        newDoc += "\n"
-                    } else {
-                        newDoc += "\n\n"
+            } else if !isDuplicate || keepBoth {
+                // Append new equation (either not a duplicate, or keeping both)
+                let trimmedDoc = newDoc.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if trimmedDoc.isEmpty {
+                    // Empty document - just add the equation without separator
+                    newDoc = "\(latexWithLabel)\n"
+                } else if trimmedDoc.hasSuffix("---") {
+                    // Document already ends with separator - just add the equation
+                    if !newDoc.hasSuffix("\n\n") {
+                        newDoc = newDoc.trimmingCharacters(in: .newlines) + "\n\n"
                     }
+                    newDoc += "\(latexWithLabel)\n\n"
+                } else {
+                    // Add separator before the new equation
+                    if !newDoc.hasSuffix("\n\n") {
+                        newDoc = newDoc.trimmingCharacters(in: .newlines) + "\n\n"
+                    }
+                    newDoc += "---\n\n\(latexWithLabel)\n\n"
                 }
-                newDoc += "---\n\n\(latexWithLabel)\n\n"
             }
         }
 
@@ -190,5 +216,16 @@ final class MathEditDocument: ReferenceFileDocument {
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .documentImported, object: nil)
         }
+    }
+
+    /// Generate a unique label by appending a number suffix
+    private func generateUniqueLabel(baseLabel: String, existingLabels: Set<String>) -> String {
+        var suffix = 2
+        var newLabel = "\(baseLabel)-\(suffix)"
+        while existingLabels.contains(newLabel) {
+            suffix += 1
+            newLabel = "\(baseLabel)-\(suffix)"
+        }
+        return newLabel
     }
 }
