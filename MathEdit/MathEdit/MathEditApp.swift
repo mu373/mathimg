@@ -36,6 +36,14 @@ struct MathEditApp: App {
                     )
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
+
+                Button("Delete Equation") {
+                    NotificationCenter.default.post(
+                        name: .deleteEquation,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut(.delete, modifiers: [.command])
             }
 
             CommandGroup(after: .importExport) {
@@ -93,6 +101,8 @@ struct MathEditApp: App {
 // MARK: - Notification Names
 extension Notification.Name {
     static let addEquation = Notification.Name("addEquation")
+    static let deleteEquation = Notification.Name("deleteEquation")
+    static let moveCursorToLine = Notification.Name("moveCursorToLine")
     static let exportEquationSVG = Notification.Name("exportEquationSVG")
     static let exportAllSVGs = Notification.Name("exportAllSVGs")
     static let copyEquationSVG = Notification.Name("copyEquationSVG")

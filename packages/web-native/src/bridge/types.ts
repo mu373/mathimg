@@ -5,6 +5,7 @@ export interface NativeToWebMessages {
   loadDocument: {
     document: string;
     globalPreamble?: string;
+    cursorLine?: number;
   };
   setActiveEquation: {
     equationId: string;
@@ -57,6 +58,7 @@ declare global {
       setFontSize: (data: NativeToWebMessages['setFontSize']) => void;
       requestContent: () => void;
       addEquation: () => void;
+      moveCursorToLine: (line: number) => void;
     };
   }
 }

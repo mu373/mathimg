@@ -225,8 +225,27 @@ struct ContentView: View {
             )
             .navigationSplitViewColumnWidth(min: 250, ideal: 350)
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .automatic) {
+        .toolbar(id: "main") {
+            ToolbarItem(id: "add", placement: .automatic) {
+                Button {
+                    NotificationCenter.default.post(name: .addEquation, object: nil)
+                } label: {
+                    Label("Add Equation", systemImage: "plus")
+                }
+                .help("Add Equation (⌘;)")
+            }
+
+            ToolbarItem(id: "delete", placement: .automatic) {
+                Button {
+                    deleteSelectedEquation()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(highlightedEquationId == nil)
+                .help("Delete Equation (⌘⌫)")
+            }
+
+            ToolbarItem(id: "export", placement: .automatic) {
                 Menu {
                     Button("Copy SVG") {
                         copySelectedSVGToClipboard()
@@ -247,8 +266,10 @@ struct ContentView: View {
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
+                .help("Export Options")
             }
         }
+        .toolbarRole(.editor)
         .onReceive(NotificationCenter.default.publisher(for: .exportEquationSVG)) { _ in
             exportSelectedAsSVG()
         }
@@ -257,6 +278,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .copyEquationSVG)) { _ in
             copySelectedSVGToClipboard()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deleteEquation)) { _ in
+            deleteSelectedEquation()
         }
 
             // AppKit-based drop zone overlay (works over WKWebView)
@@ -331,20 +355,112 @@ struct ContentView: View {
     }
 
     private func deleteSelectedEquation() {
-        guard let id = selectedEquationId,
-              let equation = document.equations.first(where: { $0.id == id }) else {
+        // Use highlightedEquationId to delete the equation under cursor
+        guard let id = highlightedEquationId,
+              let equationIndex = document.equations.firstIndex(where: { $0.id == id }) else {
             return
         }
 
-        // Remove the equation from document by line range
+        let equation = document.equations[equationIndex]
         var lines = document.projectData.document.components(separatedBy: "\n")
-        let startLine = max(0, equation.startLine - 1) // Include preceding separator
-        let endLine = min(lines.count - 1, equation.endLine + 1) // Include following separator
 
-        lines.removeSubrange(startLine...endLine)
-        document.updateDocument(lines.joined(separator: "\n"))
+        // Find the actual range to delete
+        var deleteStart = equation.startLine
+        var deleteEnd = equation.endLine
 
+        // Check for separator before this equation (skip empty lines)
+        var separatorBefore = equation.startLine - 1
+        while separatorBefore >= 0 && lines[separatorBefore].trimmingCharacters(in: .whitespaces).isEmpty {
+            separatorBefore -= 1
+        }
+        let hasSeparatorBefore = separatorBefore >= 0 &&
+            lines[separatorBefore].trimmingCharacters(in: .whitespaces).hasPrefix("---")
+
+        // Check for separator after this equation (skip empty lines)
+        var separatorAfter = equation.endLine + 1
+        while separatorAfter < lines.count && lines[separatorAfter].trimmingCharacters(in: .whitespaces).isEmpty {
+            separatorAfter += 1
+        }
+        let hasSeparatorAfter = separatorAfter < lines.count &&
+            lines[separatorAfter].trimmingCharacters(in: .whitespaces).hasPrefix("---")
+
+        // Determine what to delete:
+        // - If there's a separator before, include it and empty lines up to it
+        // - If no separator before but there's one after, include it instead
+        // - Include trailing empty lines up to separator/next content
+        if hasSeparatorBefore {
+            deleteStart = separatorBefore
+        }
+
+        // Include empty lines after the equation
+        var trailingEmpty = equation.endLine + 1
+        while trailingEmpty < lines.count && lines[trailingEmpty].trimmingCharacters(in: .whitespaces).isEmpty {
+            trailingEmpty += 1
+        }
+
+        // If this is the first equation and there's a separator after, delete it too
+        if !hasSeparatorBefore && hasSeparatorAfter {
+            deleteEnd = separatorAfter
+            // Also include empty lines after the separator
+            var afterSep = separatorAfter + 1
+            while afterSep < lines.count && lines[afterSep].trimmingCharacters(in: .whitespaces).isEmpty {
+                afterSep += 1
+            }
+            deleteEnd = afterSep - 1
+        } else if hasSeparatorBefore {
+            // Include empty lines between separator and equation content
+            deleteEnd = trailingEmpty - 1
+        }
+
+        // Ensure valid range
+        deleteStart = max(0, deleteStart)
+        deleteEnd = min(lines.count - 1, deleteEnd)
+
+        // Find where the next equation starts (after separator and empty lines)
+        var nextContentLine = deleteEnd + 1
+        while nextContentLine < lines.count {
+            let trimmed = lines[nextContentLine].trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty && !trimmed.hasPrefix("---") {
+                break
+            }
+            nextContentLine += 1
+        }
+
+        // Calculate target line after deletion
+        // The next content will shift up by the number of deleted lines
+        let linesDeleted = deleteEnd - deleteStart + 1
+        let targetLine: Int
+        if nextContentLine < lines.count {
+            // There's content after - cursor goes to where it will be after shift
+            targetLine = nextContentLine - linesDeleted
+        } else if deleteStart > 0 {
+            // No content after, go to end of previous equation
+            // Find last non-empty line before deleteStart
+            var prevContent = deleteStart - 1
+            while prevContent >= 0 && lines[prevContent].trimmingCharacters(in: .whitespaces).isEmpty {
+                prevContent -= 1
+            }
+            targetLine = max(0, prevContent)
+        } else {
+            targetLine = 0
+        }
+
+        if deleteStart <= deleteEnd {
+            lines.removeSubrange(deleteStart...deleteEnd)
+        }
+
+        // Clean up any double empty lines at the edges
+        let newDoc = lines.joined(separator: "\n")
+            .trimmingCharacters(in: .newlines)
+        document.updateDocument(newDoc.isEmpty ? "" : newDoc + "\n")
+
+        // Move cursor to the next equation content
         selectedEquationId = nil
+        NotificationCenter.default.post(
+            name: .moveCursorToLine,
+            object: nil,
+            userInfo: ["line": targetLine]
+        )
     }
 
     private func exportSelectedAsSVG() {

@@ -97,9 +97,11 @@ struct EditorWebView: NSViewRepresentable {
         var lastDocumentContent: String?
         var lastFontSize: Int?
         var isReady = false
+        var pendingCursorLine: Int?
         private var addEquationObserver: NSObjectProtocol?
         private var documentImportedObserver: NSObjectProtocol?
         private var fontSizeObserver: NSObjectProtocol?
+        private var moveCursorObserver: NSObjectProtocol?
 
         init(_ parent: EditorWebView) {
             self.parent = parent
@@ -131,6 +133,18 @@ struct EditorWebView: NSViewRepresentable {
             ) { [weak self] _ in
                 self?.checkFontSizeChange()
             }
+
+            // Listen for moveCursorToLine notification
+            moveCursorObserver = NotificationCenter.default.addObserver(
+                forName: .moveCursorToLine,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                if let line = notification.userInfo?["line"] as? Int {
+                    // Store pending cursor line to be used when document syncs
+                    self?.pendingCursorLine = line
+                }
+            }
         }
 
         deinit {
@@ -141,6 +155,9 @@ struct EditorWebView: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(observer)
             }
             if let observer = fontSizeObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = moveCursorObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
         }
@@ -163,6 +180,12 @@ struct EditorWebView: NSViewRepresentable {
             webView.evaluateJavaScript("window.nativeAPI?.addEquation()")
         }
 
+        func moveCursorToLine(_ line: Int) {
+            guard isReady, let webView = webView else { return }
+            // CodeMirror lines are 1-indexed
+            webView.evaluateJavaScript("window.nativeAPI?.moveCursorToLine?.(\(line))")
+        }
+
         func forceSyncDocumentToWeb() {
             // Force sync by clearing lastDocumentContent
             lastDocumentContent = nil
@@ -183,8 +206,14 @@ struct EditorWebView: NSViewRepresentable {
                 .replacingOccurrences(of: "'", with: "\\'")
                 .replacingOccurrences(of: "\n", with: "\\n")
 
-            // Use loadDocument which is the correct native API method
-            let js = "window.nativeAPI?.loadDocument?.({ document: '\(escapedContent)' })"
+            // Include cursor line if there's a pending one
+            var js: String
+            if let cursorLine = pendingCursorLine {
+                js = "window.nativeAPI?.loadDocument?.({ document: '\(escapedContent)', cursorLine: \(cursorLine) })"
+                pendingCursorLine = nil
+            } else {
+                js = "window.nativeAPI?.loadDocument?.({ document: '\(escapedContent)' })"
+            }
             webView.evaluateJavaScript(js)
         }
 

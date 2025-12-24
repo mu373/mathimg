@@ -42,8 +42,9 @@ interface EditorState {
   setFontSize: (size: number) => void;
 
   // Native integration
-  loadFromNative: (document: string, globalPreamble?: string) => void;
+  loadFromNative: (document: string, globalPreamble?: string, cursorLine?: number) => void;
   jumpToEquation: (equationId: string) => void;
+  jumpToLine: (line: number) => void;
   handleCursorChange: (line: number, column: number) => void;
   addEquation: () => void;
 }
@@ -117,7 +118,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
-  loadFromNative: (document: string, globalPreamble?: string) => {
+  loadFromNative: (document: string, globalPreamble?: string, cursorLine?: number) => {
     const { frontmatter, equations } = parseDocumentWithFrontmatter(document);
 
     set({
@@ -133,6 +134,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (isRunningInNative()) {
       requestRender(equations, frontmatter);
     }
+
+    // Move cursor to specified line after loading
+    if (cursorLine !== undefined) {
+      // Use setTimeout to ensure editor has updated
+      setTimeout(() => {
+        get().jumpToLine(cursorLine);
+      }, 0);
+    }
   },
 
   jumpToEquation: (equationId: string) => {
@@ -147,6 +156,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       editorInstance.revealLineInCenter(lineNumber);
       editorInstance.focus();
       set({ activeEquationId: equationId });
+    }
+  },
+
+  jumpToLine: (line: number) => {
+    const { editorInstance } = get();
+
+    if (editorInstance) {
+      // Monaco uses 1-based line numbers
+      const lineNumber = line + 1;
+      const model = editorInstance.getModel();
+      const column = model ? model.getLineMaxColumn(lineNumber) : 1;
+      editorInstance.setPosition({ lineNumber, column });
+      editorInstance.revealLineInCenter(lineNumber);
+      editorInstance.focus();
     }
   },
 
@@ -235,7 +258,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 if (typeof window !== 'undefined') {
   window.nativeAPI = {
     loadDocument: (data) => {
-      useEditorStore.getState().loadFromNative(data.document, data.globalPreamble);
+      useEditorStore.getState().loadFromNative(data.document, data.globalPreamble, data.cursorLine);
     },
     setActiveEquation: (data) => {
       useEditorStore.getState().jumpToEquation(data.equationId);
@@ -249,6 +272,9 @@ if (typeof window !== 'undefined') {
     },
     setFontSize: (data) => {
       useEditorStore.getState().setFontSize(data.fontSize);
+    },
+    moveCursorToLine: (line: number) => {
+      useEditorStore.getState().jumpToLine(line);
     },
   };
 }
