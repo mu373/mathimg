@@ -63,6 +63,7 @@ struct SidebarView: View {
 
 struct EquationRowView: View {
     let equation: Equation
+    @AppStorage("showEquationInSidebar") private var showEquation = false
 
     /// LaTeX without comments and \label{}
     private var latexPreview: String {
@@ -90,10 +91,12 @@ struct EquationRowView: View {
                 .font(.body)
                 .lineLimit(1)
 
-            Text(latexPreview.prefix(30))
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
+            if showEquation {
+                Text(latexPreview.prefix(30))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
         }
         .padding(.vertical, 2)
     }

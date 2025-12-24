@@ -104,6 +104,7 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @AppStorage("defaultDisplayMode") private var defaultDisplayMode = "block"
+    @AppStorage("showEquationInSidebar") private var showEquationInSidebar = false
 
     var body: some View {
         Form {
@@ -111,6 +112,8 @@ struct GeneralSettingsView: View {
                 Text("Block").tag("block")
                 Text("Inline").tag("inline")
             }
+
+            Toggle("Show Equation in Sidebar", isOn: $showEquationInSidebar)
         }
         .padding()
     }
