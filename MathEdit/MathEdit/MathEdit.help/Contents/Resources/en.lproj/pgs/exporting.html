@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="keywords" content="export, save, svg, png, copy, clipboard, reimport, round-trip, metadata">
+	<link rel="stylesheet" href="../../Shared/sty/standard.css">
+	<script defer src="../../Shared/js/toc.js"></script>
+
+	<title>How to export equations</title>
+</head>
+
+<body>
+
+<h1>How to export equations</h1>
+
+<p>Export your equations as image files for use in presentations, documents, and websites. MathEdit's SVG exports contain embedded metadata, so you can re-import and edit them anytime.</p>
+
+<section>
+<h2>Re-editable SVG exports</h2>
+
+<p>Every SVG exported from MathEdit contains embedded metadata including:</p>
+
+<ul>
+	<li>The original LaTeX source code</li>
+	<li>The equation label</li>
+	<li>Display mode (block or inline)</li>
+	<li>Generation timestamp</li>
+	<li>Rendering engine version</li>
+</ul>
+
+<p>This means you can:</p>
+
+<ul>
+	<li>Drag an SVG file back into MathEdit to continue editing</li>
+	<li>Update equations without recreating them from scratch</li>
+	<li>Share SVG files with collaborators who can edit them in MathEdit</li>
+</ul>
+
+<p>Even if you lose the original MathEdit project, you can recover your equations from the exported SVGs.</p>
+</section>
+
+<section>
+<h2>Export formats</h2>
+
+<dl>
+	<dt>SVG (Scalable Vector Graphics)</dt>
+	<dd>Vector format that scales perfectly at any size. Contains embedded LaTeX source for re-editing. Ideal for presentations and documents.</dd>
+
+	<dt>PNG (Portable Network Graphics)</dt>
+	<dd>Raster format with transparency. Use when SVG is not supported. Does not contain embedded source.</dd>
+</dl>
+</section>
+
+<section>
+<h2>Export a single equation</h2>
+
+<ol>
+	<li>Select the equation you want to export.</li>
+	<li>Choose <strong>File > Export > Export SVG...</strong> or <strong>Export PNG...</strong></li>
+	<li>Choose a location and click Save.</li>
+</ol>
+
+<p>Keyboard shortcut: <kbd>⇧⌘E</kbd> for SVG</p>
+</section>
+
+<section>
+<h2>Export all equations</h2>
+
+<p>Export your entire project at once:</p>
+<ol>
+	<li>Choose <strong>File > Export > Export All SVGs...</strong></li>
+	<li>Choose a folder location.</li>
+	<li>All equations are saved as individual files, named using their labels.</li>
+</ol>
+
+<p>Keyboard shortcut: <kbd>⌥⇧⌘E</kbd></p>
+</section>
+
+<section>
+<h2>Copy to clipboard</h2>
+
+<p>Copy equations for quick pasting into Keynote, PowerPoint, or other apps:</p>
+
+<ul>
+	<li><kbd>⇧⌘C</kbd> — Copy as SVG (re-editable)</li>
+	<li><kbd>⌥⌘C</kbd> — Copy as PNG</li>
+	<li><kbd>⌥⇧⌘C</kbd> — Copy LaTeX source</li>
+</ul>
+
+<p>You can also right-click on an equation in the preview pane to access copy options.</p>
+</section>
+
+<section>
+<h2>Re-import an SVG</h2>
+
+<p>To edit a previously exported SVG:</p>
+
+<ul>
+	<li>Drag the SVG file onto the MathEdit window, or</li>
+	<li>Choose <strong>File > Import SVG...</strong></li>
+</ul>
+
+<p>MathEdit extracts the embedded LaTeX source and adds the equation to your current project. The label is preserved, so you can update and re-export with the same filename.</p>
+</section>
+
+<section id="cf">
+<h2>See also</h2>
+<ul>
+	<li><a href="managing_equations.html">Managing equations in your project</a></li>
+	<li><a href="shortcuts.html">Keyboard shortcuts</a></li>
+</ul>
+</section>
+
+</body>
+</html>

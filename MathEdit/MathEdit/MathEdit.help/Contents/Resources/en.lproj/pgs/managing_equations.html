@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="keywords" content="manage, organize, sidebar, delete, add, project, library, label">
+	<link rel="stylesheet" href="../../Shared/sty/standard.css">
+	<script defer src="../../Shared/js/toc.js"></script>
+
+	<title>Managing equations in your project</title>
+</head>
+
+<body>
+
+<h1>Managing equations in your project</h1>
+
+<p>A MathEdit project keeps all related equations in one place. Instead of scattered files, you have a single document containing every equation for a presentation, paper, or document. When you need to update equations, open the project, make changes, and re-export.</p>
+
+<section>
+<h2>Organize by project</h2>
+
+<p>Create a separate MathEdit document for each project:</p>
+<ul>
+	<li>A presentation about machine learning</li>
+	<li>A research paper on differential equations</li>
+	<li>A textbook chapter on calculus</li>
+</ul>
+
+<p>All equations stay together. When you revise your presentation, open the MathEdit project, update what you need, and export again.</p>
+</section>
+
+<section>
+<h2>Adding equations</h2>
+
+<p>Equations are separated by <code>---</code> in your document. To add a new equation, type <code>---</code> on its own line and write your LaTeX below it:</p>
+
+<pre><code>E = mc^2
+\label{energy}
+
+---
+
+F = ma
+\label{newton}</code></pre>
+</section>
+
+<section>
+<h2>Labeling equations</h2>
+
+<p>Use <code>\label{name}</code> to give each equation a descriptive identifier:</p>
+
+<pre><code>\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
+\label{sum-formula}</code></pre>
+
+<p>Labels appear in the sidebar and are used as filenames when exporting. Use descriptive names like <code>quadratic-formula</code> or <code>loss-function</code>.</p>
+
+<p>If you don't add a label, MathEdit automatically assigns one (<code>eq1</code>, <code>eq2</code>, etc.).</p>
+</section>
+
+<section>
+<h2>Select an equation</h2>
+
+<p>Click on an equation in the sidebar or preview pane to select it. The editor jumps to its location in the document.</p>
+</section>
+
+<section>
+<h2>Delete an equation</h2>
+
+<p>To delete an equation, remove its content and the surrounding <code>---</code> separators from the document.</p>
+</section>
+
+<section>
+<h2>Frontmatter for shared settings</h2>
+
+<p>Add a frontmatter section at the top of your document to define color presets and default settings that apply to all equations:</p>
+
+<pre><code>define.myblue: #0066ff
+color: black
+
+---
+
+E = \color{myblue} mc^2</code></pre>
+
+<p>See <a href="syntax.html">Document syntax</a> for details on frontmatter options.</p>
+</section>
+
+<section id="cf">
+<h2>See also</h2>
+<ul>
+	<li><a href="getting_started.html">Getting started with MathEdit</a></li>
+	<li><a href="syntax.html">Document syntax</a></li>
+	<li><a href="exporting.html">How to export equations</a></li>
+</ul>
+</section>
+
+</body>
+</html>

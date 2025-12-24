@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="keywords" content="getting started, new, create, document, project">
+	<link rel="stylesheet" href="../../Shared/sty/standard.css">
+	<script defer src="../../Shared/js/toc.js"></script>
+
+	<title>Getting started with MathEdit</title>
+</head>
+
+<body>
+
+<h1>Getting started with MathEdit</h1>
+
+<p>MathEdit helps you manage all the equations for a project in one place. Create a MathEdit document for each presentation or paper, add your equations, then export them as SVG images. Every SVG contains embedded metadata, so you can re-import and edit your equations anytime.</p>
+
+<section>
+<h2>Create a new project</h2>
+
+<ol>
+	<li>Open MathEdit.</li>
+	<li>Choose <strong>File > New</strong> or press <kbd>⌘N</kbd>.</li>
+	<li>A new document opens with one empty equation.</li>
+</ol>
+
+<p>Save your project to keep all equations together. When you need to update an equation later, open the project, make your changes, and re-export.</p>
+</section>
+
+<section>
+<h2>The MathEdit interface</h2>
+
+<p>The main window has three areas:</p>
+
+<dl>
+	<dt>Sidebar (left)</dt>
+	<dd>Shows all equations in your project. Click to select.</dd>
+
+	<dt>Editor (center)</dt>
+	<dd>Write your LaTeX code here with syntax highlighting.</dd>
+
+	<dt>Preview (right)</dt>
+	<dd>See your rendered equation update as you type.</dd>
+</dl>
+</section>
+
+<section>
+<h2>Write your first equation</h2>
+
+<ol>
+	<li>Click in the editor area.</li>
+	<li>Type a LaTeX equation, for example: <code>E = mc^2</code></li>
+	<li>The preview updates automatically as you type.</li>
+</ol>
+</section>
+
+<section>
+<h2>Add more equations</h2>
+
+<p>Separate equations with <code>---</code> on its own line. Use <code>\label{name}</code> to identify each equation:</p>
+
+<pre><code>E = mc^2
+\label{energy}
+
+---
+
+F = ma
+\label{newton}</code></pre>
+
+<p>Each section becomes a separate equation you can export individually.</p>
+</section>
+
+<section>
+<h2>Export and re-edit</h2>
+
+<p>Export your equations as SVG files. MathEdit embeds the original LaTeX source in each SVG, so you can drag an SVG back into MathEdit to continue editing. No more recreating equations when you need to make changes.</p>
+</section>
+
+<section id="cf">
+<h2>See also</h2>
+<ul>
+	<li><a href="syntax.html">Document syntax</a></li>
+	<li><a href="managing_equations.html">Managing equations in your project</a></li>
+	<li><a href="exporting.html">How to export equations</a></li>
+</ul>
+</section>
+
+</body>
+</html>

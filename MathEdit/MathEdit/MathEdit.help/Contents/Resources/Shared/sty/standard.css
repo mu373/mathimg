@@ -1,0 +1,144 @@
+@charset "UTF-8";
+
+@import "common.css";
+
+:root {
+	--accent-background: hsl(206, 50%, 97%);
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--accent-background: hsl(206, 30%, 20%);
+	}
+}
+
+img {
+	max-width: 100%;
+}
+
+body > h1 {
+	font-size: 2rem;
+	font-weight: 500;
+	line-height: 1.2;
+	margin: 2.5rem 0 1.4rem;
+}
+
+body > section,
+article {
+	margin: 1.5rem 0 1rem;
+	padding: 1rem 0 0;
+	border-top: 1px solid -apple-system-separator;
+}
+
+h2 {
+	font-size: 1rem;
+	font-weight: 700;
+	line-height: 1.4;
+	margin-top: 0;
+}
+
+h3 {
+	font-size: 1rem;
+	font-weight: 600;
+	line-height: 1.1;
+	margin-top: 2rem;
+}
+
+figure {
+	margin: 0;
+}
+
+ul {
+	list-style-type: disc;
+}
+ol,
+ul {
+	padding: 0 1.5rem;
+}
+li p {
+	margin: 0.5rem 0;
+}
+li:first-child p {
+	margin-top: 0;
+}
+
+dt {
+	font-weight: 600;
+}
+dd + dt {
+	margin-top: 0.5rem;
+}
+
+table {
+	font-size: 0.95rem;
+	border-collapse: collapse;
+	empty-cells: show;
+	margin: 1rem 0;
+}
+table tr {
+	border-bottom: 1px solid -apple-system-quaternary-label;
+}
+table thead tr:first-child {
+	border-top: 2.5px solid -apple-system-quaternary-label;
+}
+table tr > * {
+	padding: 0.5rem 0.6rem;
+	text-align: left;
+}
+table tr > :first-child {
+	padding-inline-start: 0;
+}
+table tr > :last-child {
+	padding-inline-end: 0;
+}
+table thead th {
+	padding: 0.4rem 0.6rem;
+	font-weight: bold;
+}
+table th {
+	font-weight: normal;
+	white-space: nowrap;
+}
+table tbody {
+	vertical-align: top;
+}
+
+a.toc {
+	font-size: 15px;
+	font-weight: 400;
+	position: absolute;
+	top: 5px;
+	color: -apple-system-secondary-label;
+}
+a.toc::before {
+	content: "‹ ";
+}
+
+pre.source {
+	background: hsl(0, 0%, 98%);
+	border: 1px solid -apple-system-separator;
+	border-radius: 0.5rem;
+	max-width: 50rem;
+	padding: 0.4rem 0.8rem;
+	overflow: scroll;
+}
+@media (prefers-color-scheme: dark) {
+	pre.source {
+		background: hsl(0, 0%, 10%);
+	}
+}
+
+/* See also */
+
+#cf {
+	border-top: none;
+}
+#cf > * {
+	margin: 0;
+}
+#cf ul {
+	list-style-type: none;
+	padding: 0;
+}
+#cf ul li {
+	margin: 0.4rem 0;
+}

@@ -74,5 +74,9 @@
     <true/>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
+    <key>CFBundleHelpBookFolder</key>
+    <string>MathEdit.help</string>
+    <key>CFBundleHelpBookName</key>
+    <string>com.minamiueda.MathEdit.help</string>
 </dict>
 </plist>

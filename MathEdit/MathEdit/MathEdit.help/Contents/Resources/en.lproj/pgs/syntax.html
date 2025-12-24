@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="keywords" content="equation, latex, write, editor, math, label, separator">
+	<link rel="stylesheet" href="../../Shared/sty/standard.css">
+	<script defer src="../../Shared/js/toc.js"></script>
+
+	<title>Document syntax</title>
+</head>
+
+<body>
+
+<h1>Document syntax</h1>
+
+<p>MathEdit uses a plain-text format where you write LaTeX equations separated by <code>---</code>. Each equation can have a label and color settings.</p>
+
+<section>
+<h2>Document structure</h2>
+
+<p>A MathEdit document consists of equations separated by three dashes:</p>
+
+<pre><code>E = mc^2
+\label{energy}
+
+---
+
+F = ma
+\label{newton}
+
+---
+
+a^2 + b^2 = c^2
+\label{pythagoras}</code></pre>
+
+<p>Each section between <code>---</code> separators becomes a separate equation that you can export individually.</p>
+</section>
+
+<section>
+<h2>Labeling equations</h2>
+
+<p>Use <code>\label{name}</code> to give each equation a descriptive name:</p>
+
+<pre><code>\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+\label{gaussian-integral}</code></pre>
+
+<p>Labels are used for:</p>
+<ul>
+	<li>Identifying equations in the sidebar</li>
+	<li>Naming exported files (e.g., <code>gaussian-integral.svg</code>)</li>
+	<li>Preserving equation identity when re-importing</li>
+</ul>
+
+<p>If you don't provide a label, MathEdit assigns one automatically (<code>eq1</code>, <code>eq2</code>, etc.).</p>
+</section>
+
+<section>
+<h2>Frontmatter</h2>
+
+<p>Add a frontmatter section at the top of your document (before the first <code>---</code>) to define settings:</p>
+
+<pre><code>define.myblue: #0066ff
+define.myred: #ff0066
+color: blue
+
+---
+
+E = \color{myblue} mc^2
+\label{energy}</code></pre>
+
+<p>Frontmatter options:</p>
+<dl>
+	<dt><code>define.name: value</code></dt>
+	<dd>Define a color preset that you can use with <code>\color{name}</code></dd>
+
+	<dt><code>color: value</code></dt>
+	<dd>Set the default color for all equations</dd>
+</dl>
+</section>
+
+<section>
+<h2>Per-equation colors</h2>
+
+<p>Override the default color for a specific equation by adding a comment at the end:</p>
+
+<pre><code>E = mc^2
+% color: red</code></pre>
+
+<p>Or use <code>\color{}</code> within the equation to highlight specific terms:</p>
+
+<pre><code>E = \color{red} mc^2</code></pre>
+</section>
+
+<section>
+<h2>Basic LaTeX syntax</h2>
+
+<p>Common LaTeX examples:</p>
+
+<table>
+	<thead>
+		<tr>
+			<th>LaTeX</th>
+			<th>Result</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td><code>x^2</code></td>
+			<td>Superscript (x squared)</td>
+		</tr>
+		<tr>
+			<td><code>x_i</code></td>
+			<td>Subscript</td>
+		</tr>
+		<tr>
+			<td><code>\frac{a}{b}</code></td>
+			<td>Fraction</td>
+		</tr>
+		<tr>
+			<td><code>\sqrt{x}</code></td>
+			<td>Square root</td>
+		</tr>
+		<tr>
+			<td><code>\sum_{i=1}^{n}</code></td>
+			<td>Summation</td>
+		</tr>
+		<tr>
+			<td><code>\int_a^b</code></td>
+			<td>Integral</td>
+		</tr>
+	</tbody>
+</table>
+</section>
+
+<section>
+<h2>Greek letters</h2>
+
+<p>Use backslash followed by the letter name:</p>
+
+<table>
+	<thead>
+		<tr>
+			<th>LaTeX</th>
+			<th>Letter</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td><code>\alpha</code>, <code>\beta</code>, <code>\gamma</code></td>
+			<td>α, β, γ</td>
+		</tr>
+		<tr>
+			<td><code>\Delta</code>, <code>\Sigma</code>, <code>\Omega</code></td>
+			<td>Δ, Σ, Ω (uppercase)</td>
+		</tr>
+		<tr>
+			<td><code>\pi</code>, <code>\theta</code>, <code>\lambda</code></td>
+			<td>π, θ, λ</td>
+		</tr>
+	</tbody>
+</table>
+</section>
+
+<section>
+<h2>Grouping with braces</h2>
+
+<p>Use curly braces <code>{}</code> to group multiple characters:</p>
+
+<ul>
+	<li><code>x^{10}</code> — x to the power of 10</li>
+	<li><code>a_{ij}</code> — a with subscript ij</li>
+	<li><code>\frac{x+1}{x-1}</code> — fraction with expressions</li>
+</ul>
+</section>
+
+<section id="cf">
+<h2>See also</h2>
+<ul>
+	<li><a href="latex_reference.html">LaTeX quick reference</a></li>
+</ul>
+</section>
+
+</body>
+</html>
