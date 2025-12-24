@@ -35,7 +35,11 @@ class DropZoneNSView: NSView {
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if hasSVGFile(sender) {
+        // Ignore drags from within the app (internal drags from preview cells)
+        if sender.draggingSource is NSView {
+            return []
+        }
+        if hasExternalSVGFile(sender) {
             onDragStateChanged?(true)
             return .copy
         }
@@ -43,7 +47,11 @@ class DropZoneNSView: NSView {
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        return hasSVGFile(sender) ? .copy : []
+        // Ignore drags from within the app
+        if sender.draggingSource is NSView {
+            return []
+        }
+        return hasExternalSVGFile(sender) ? .copy : []
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -56,6 +64,11 @@ class DropZoneNSView: NSView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         onDragStateChanged?(false)
+
+        // Ignore drags from within the app
+        if sender.draggingSource is NSView {
+            return false
+        }
 
         guard let items = sender.draggingPasteboard.pasteboardItems else { return false }
 
@@ -80,7 +93,7 @@ class DropZoneNSView: NSView {
         return false
     }
 
-    private func hasSVGFile(_ sender: NSDraggingInfo) -> Bool {
+    private func hasExternalSVGFile(_ sender: NSDraggingInfo) -> Bool {
         guard let items = sender.draggingPasteboard.pasteboardItems else { return false }
         for item in items {
             if let urlString = item.string(forType: .fileURL),
@@ -250,16 +263,33 @@ struct ContentView: View {
                     Button("Copy SVG") {
                         copySelectedSVGToClipboard()
                     }
-                    .disabled(selectedEquationId == nil)
+                    .disabled(highlightedEquationId == nil || document.renderedSVGs[highlightedEquationId ?? ""] == nil)
+
+                    Button("Copy PNG") {
+                        copySelectedPNGToClipboard()
+                    }
+                    .disabled(highlightedEquationId == nil || document.renderedSVGs[highlightedEquationId ?? ""] == nil)
+
+                    Button("Copy LaTeX") {
+                        copySelectedLaTeXToClipboard()
+                    }
+                    .disabled(highlightedEquationId == nil)
 
                     Divider()
 
-                    Button("Export as SVG...") {
+                    Button("Export SVG…") {
                         exportSelectedAsSVG()
                     }
-                    .disabled(selectedEquationId == nil)
+                    .disabled(highlightedEquationId == nil || document.renderedSVGs[highlightedEquationId ?? ""] == nil)
 
-                    Button("Export All SVGs...") {
+                    Button("Export PNG…") {
+                        exportSelectedAsPNG()
+                    }
+                    .disabled(highlightedEquationId == nil || document.renderedSVGs[highlightedEquationId ?? ""] == nil)
+
+                    Divider()
+
+                    Button("Export All SVGs…") {
                         exportAllSVGs()
                     }
                     .disabled(document.equations.isEmpty)
@@ -273,11 +303,20 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .exportEquationSVG)) { _ in
             exportSelectedAsSVG()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .exportEquationPNG)) { _ in
+            exportSelectedAsPNG()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .exportAllSVGs)) { _ in
             exportAllSVGs()
         }
         .onReceive(NotificationCenter.default.publisher(for: .copyEquationSVG)) { _ in
             copySelectedSVGToClipboard()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .copyEquationPNG)) { _ in
+            copySelectedPNGToClipboard()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .copyEquationLaTeX)) { _ in
+            copySelectedLaTeXToClipboard()
         }
         .onReceive(NotificationCenter.default.publisher(for: .deleteEquation)) { _ in
             deleteSelectedEquation()
@@ -470,9 +509,14 @@ struct ContentView: View {
             return
         }
 
+        let sanitizedLabel = equation.label
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
+
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.svg]
-        panel.nameFieldStringValue = "\(equation.label).svg"
+        panel.nameFieldStringValue = "\(sanitizedLabel).svg"
 
         if panel.runModal() == .OK, let url = panel.url {
             let exportSVG = wrapSVGWithMetadata(svg: svg, equation: equation)
@@ -507,18 +551,191 @@ struct ContentView: View {
         }
 
         let fullSVG = wrapSVGWithMetadata(svg: svg, equation: equation)
+        let sanitizedLabel = equation.label
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
 
         guard let svgData = fullSVG.data(using: .utf8) else { return }
 
-        NSPasteboard.general.clearContents()
-        // Copy as SVG image type
-        NSPasteboard.general.setData(svgData, forType: NSPasteboard.PasteboardType("public.svg-image"))
-        // Also copy as plain text fallback
-        NSPasteboard.general.setString(fullSVG, forType: .string)
+        // Write to temp file for file-based clipboard
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(sanitizedLabel)
+            .appendingPathExtension("svg")
+        do {
+            try svgData.write(to: tempURL)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([tempURL as NSURL])
+        } catch {
+            // Fallback: copy as text
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(fullSVG, forType: .string)
+        }
     }
 
-    /// Wrap raw MathJax SVG with metadata for round-trip import/export
+    private func copySelectedPNGToClipboard() {
+        guard let id = highlightedEquationId,
+              let svg = document.renderedSVGs[id],
+              let image = createPNGImage(from: svg),
+              let tiffData = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(pngData, forType: .png)
+    }
+
+    private func copySelectedLaTeXToClipboard() {
+        guard let id = highlightedEquationId,
+              let equation = document.equations.first(where: { $0.id == id }) else {
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(equation.latex, forType: .string)
+    }
+
+    private func exportSelectedAsPNG() {
+        guard let id = highlightedEquationId,
+              let svg = document.renderedSVGs[id],
+              let equation = document.equations.first(where: { $0.id == id }),
+              let image = createPNGImage(from: svg),
+              let tiffData = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+            return
+        }
+
+        let sanitizedLabel = equation.label
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.nameFieldStringValue = "\(sanitizedLabel).png"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            try? pngData.write(to: url)
+        }
+    }
+
+    /// Create PNG image from SVG string
+    private func createPNGImage(from svg: String) -> NSImage? {
+        var svgString = svg
+        if !svgString.contains("xmlns=") {
+            svgString = svgString.replacingOccurrences(
+                of: "<svg",
+                with: "<svg xmlns=\"http://www.w3.org/2000/svg\""
+            )
+        }
+
+        // Convert 'ex' units to 'pt'
+        let exToPt: Double = 8.0
+        if let pattern = try? NSRegularExpression(pattern: "([0-9.]+)ex", options: []) {
+            var result = svgString
+            while let match = pattern.firstMatch(in: result, options: [], range: NSRange(result.startIndex..., in: result)) {
+                guard let fullRange = Range(match.range, in: result),
+                      let numRange = Range(match.range(at: 1), in: result),
+                      let value = Double(result[numRange]) else { break }
+                result = result.replacingCharacters(in: fullRange, with: String(format: "%.3fpt", value * exToPt))
+            }
+            svgString = result
+        }
+
+        let fullSVG = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\(svgString)"
+        guard let data = fullSVG.data(using: .utf8) else { return nil }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("svg")
+
+        do {
+            try data.write(to: tempURL)
+            guard let svgImage = NSImage(contentsOf: tempURL) else {
+                try? FileManager.default.removeItem(at: tempURL)
+                return nil
+            }
+            _ = svgImage.tiffRepresentation
+            try? FileManager.default.removeItem(at: tempURL)
+
+            let originalSize = svgImage.size
+            guard svgImage.isValid && originalSize.width > 1 && originalSize.height > 1 else {
+                return nil
+            }
+
+            // Scale 3x for high quality
+            let scale: CGFloat = 3.0
+            let targetSize = NSSize(
+                width: originalSize.width * scale,
+                height: originalSize.height * scale
+            )
+
+            let screenScale = NSScreen.main?.backingScaleFactor ?? 2.0
+            let pixelWidth = Int(targetSize.width * screenScale)
+            let pixelHeight = Int(targetSize.height * screenScale)
+
+            guard let bitmapRep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: pixelWidth,
+                pixelsHigh: pixelHeight,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+            ) else {
+                return nil
+            }
+
+            bitmapRep.size = targetSize
+
+            NSGraphicsContext.saveGraphicsState()
+            guard let context = NSGraphicsContext(bitmapImageRep: bitmapRep) else {
+                NSGraphicsContext.restoreGraphicsState()
+                return nil
+            }
+            NSGraphicsContext.current = context
+            context.imageInterpolation = .high
+
+            svgImage.draw(
+                in: NSRect(origin: .zero, size: targetSize),
+                from: NSRect(origin: .zero, size: originalSize),
+                operation: .copy,
+                fraction: 1.0
+            )
+
+            NSGraphicsContext.restoreGraphicsState()
+
+            let scaledImage = NSImage(size: targetSize)
+            scaledImage.addRepresentation(bitmapRep)
+            return scaledImage
+        } catch {
+            return nil
+        }
+    }
+
+    /// Scale a dimension string (e.g., "10.5ex") by a factor
+    private func scaleDimension(_ dimension: String, scale: Double) -> String {
+        let pattern = #"^([0-9.]+)(ex|pt|px|em)?$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []),
+              let match = regex.firstMatch(in: dimension, options: [], range: NSRange(dimension.startIndex..., in: dimension)),
+              let numRange = Range(match.range(at: 1), in: dimension),
+              let value = Double(dimension[numRange]) else {
+            return dimension
+        }
+        let unit = match.range(at: 2).location != NSNotFound ? String(dimension[Range(match.range(at: 2), in: dimension)!]) : ""
+        return String(format: "%.3f", value * scale) + unit
+    }
+
+    /// Wrap raw MathJax SVG with metadata for round-trip import/export (scaled 2x)
     private func wrapSVGWithMetadata(svg: String, equation: Equation) -> String {
+        let scale = 2.0
+
         // Extract dimensions from the SVG
         let widthMatch = svg.range(of: #"width="([^"]+)""#, options: .regularExpression)
         let heightMatch = svg.range(of: #"height="([^"]+)""#, options: .regularExpression)
@@ -546,6 +763,10 @@ struct ContentView: View {
                 viewBox = String(fullMatch[start.upperBound..<end])
             }
         }
+
+        // Scale width and height by 2x
+        let scaledWidth = scaleDimension(width, scale: scale)
+        let scaledHeight = scaleDimension(height, scale: scale)
 
         // Extract inner content from MathJax SVG
         var innerContent = svg
@@ -588,8 +809,8 @@ struct ContentView: View {
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg"
-             width="\(width)"
-             height="\(height)"
+             width="\(scaledWidth)"
+             height="\(scaledHeight)"
              viewBox="\(viewBox)">
           <metadata id="latex-equations" data-type="application/json">
         \(escapedMetadata)

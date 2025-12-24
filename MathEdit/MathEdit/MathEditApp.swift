@@ -37,6 +37,24 @@ struct MathEditApp: App {
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
 
+                Button("Copy PNG") {
+                    NotificationCenter.default.post(
+                        name: .copyEquationPNG,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+
+                Button("Copy LaTeX") {
+                    NotificationCenter.default.post(
+                        name: .copyEquationLaTeX,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut("c", modifiers: [.command, .option, .shift])
+
+                Divider()
+
                 Button("Delete Equation") {
                     NotificationCenter.default.post(
                         name: .deleteEquation,
@@ -48,7 +66,7 @@ struct MathEditApp: App {
 
             CommandGroup(after: .importExport) {
                 Menu("Export") {
-                    Button("Export SVG...") {
+                    Button("Export SVG…") {
                         NotificationCenter.default.post(
                             name: .exportEquationSVG,
                             object: nil
@@ -56,7 +74,16 @@ struct MathEditApp: App {
                     }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
 
-                    Button("Export All SVGs...") {
+                    Button("Export PNG…") {
+                        NotificationCenter.default.post(
+                            name: .exportEquationPNG,
+                            object: nil
+                        )
+                    }
+
+                    Divider()
+
+                    Button("Export All SVGs…") {
                         NotificationCenter.default.post(
                             name: .exportAllSVGs,
                             object: nil
@@ -104,8 +131,11 @@ extension Notification.Name {
     static let deleteEquation = Notification.Name("deleteEquation")
     static let moveCursorToLine = Notification.Name("moveCursorToLine")
     static let exportEquationSVG = Notification.Name("exportEquationSVG")
+    static let exportEquationPNG = Notification.Name("exportEquationPNG")
     static let exportAllSVGs = Notification.Name("exportAllSVGs")
     static let copyEquationSVG = Notification.Name("copyEquationSVG")
+    static let copyEquationPNG = Notification.Name("copyEquationPNG")
+    static let copyEquationLaTeX = Notification.Name("copyEquationLaTeX")
     static let documentImported = Notification.Name("documentImported")
     static let importSvgFromWeb = Notification.Name("importSvgFromWeb")
 }

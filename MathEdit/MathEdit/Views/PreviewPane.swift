@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // Cache for rendered images to prevent blinking
 private class ImageCache {
@@ -301,6 +302,161 @@ struct EquationRow: View {
         return ImageCache.shared.image(for: equation.id, svg: svg, zoom: zoom)
     }
 
+    /// Create a high-quality PNG image for export/drag
+    private func createExportImage() -> NSImage? {
+        guard let svg = svg else { return nil }
+        // Use zoom 2.0 for high-quality export
+        return ImageCache.shared.image(for: "\(equation.id)-export", svg: svg, zoom: 2.0)
+    }
+
+    /// Create SVG data with proper XML header, scaled 2x for export
+    private func createSVGData() -> Data? {
+        guard let svg = svg else { return nil }
+        let scaledSVG = Self.scaleSVG(svg, scale: 2.0)
+        return scaledSVG.data(using: .utf8)
+    }
+
+    /// Scale SVG dimensions by a factor
+    private static func scaleSVG(_ svg: String, scale: Double) -> String {
+        var svgString = svg
+
+        // Add xmlns if missing
+        if !svgString.contains("xmlns=") {
+            svgString = svgString.replacingOccurrences(
+                of: "<svg",
+                with: "<svg xmlns=\"http://www.w3.org/2000/svg\""
+            )
+        }
+
+        // Scale width attribute
+        if let widthPattern = try? NSRegularExpression(pattern: #"width="([0-9.]+)(ex|pt|px|em)?""#, options: []),
+           let match = widthPattern.firstMatch(in: svgString, options: [], range: NSRange(svgString.startIndex..., in: svgString)),
+           let fullRange = Range(match.range, in: svgString),
+           let numRange = Range(match.range(at: 1), in: svgString),
+           let value = Double(svgString[numRange]) {
+            let unit = match.range(at: 2).location != NSNotFound ? String(svgString[Range(match.range(at: 2), in: svgString)!]) : ""
+            let newValue = value * scale
+            svgString = svgString.replacingCharacters(in: fullRange, with: "width=\"\(String(format: "%.3f", newValue))\(unit)\"")
+        }
+
+        // Scale height attribute
+        if let heightPattern = try? NSRegularExpression(pattern: #"height="([0-9.]+)(ex|pt|px|em)?""#, options: []),
+           let match = heightPattern.firstMatch(in: svgString, options: [], range: NSRange(svgString.startIndex..., in: svgString)),
+           let fullRange = Range(match.range, in: svgString),
+           let numRange = Range(match.range(at: 1), in: svgString),
+           let value = Double(svgString[numRange]) {
+            let unit = match.range(at: 2).location != NSNotFound ? String(svgString[Range(match.range(at: 2), in: svgString)!]) : ""
+            let newValue = value * scale
+            svgString = svgString.replacingCharacters(in: fullRange, with: "height=\"\(String(format: "%.3f", newValue))\(unit)\"")
+        }
+
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\(svgString)"
+    }
+
+    /// Sanitize label for use as filename (remove/replace invalid characters)
+    private var sanitizedLabel: String {
+        equation.label
+            .replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
+    }
+
+    /// Create an NSItemProvider for drag operations - provides SVG file
+    private func createDragItemProvider() -> NSItemProvider {
+        guard let svgData = createSVGData() else {
+            return NSItemProvider()
+        }
+
+        let provider = NSItemProvider()
+
+        // Register as file with .svg extension for better app compatibility
+        provider.suggestedName = sanitizedLabel
+
+        // Register SVG as a file representation
+        provider.registerFileRepresentation(
+            forTypeIdentifier: UTType.svg.identifier,
+            fileOptions: [],
+            visibility: .all
+        ) { completion in
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("svg")
+            do {
+                try svgData.write(to: tempURL)
+                completion(tempURL, true, nil)
+            } catch {
+                completion(nil, false, error)
+            }
+            return nil
+        }
+
+        return provider
+    }
+
+    private func copySVGToClipboard() {
+        guard let svgData = createSVGData() else { return }
+
+        // Write SVG to a temp file for file-based clipboard
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(sanitizedLabel)
+            .appendingPathExtension("svg")
+        do {
+            try svgData.write(to: tempURL)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([tempURL as NSURL])
+        } catch {
+            // Fallback: copy as text
+            if let svg = svg {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(svg, forType: .string)
+            }
+        }
+    }
+
+    private func copyLaTeXToClipboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(equation.latex, forType: .string)
+    }
+
+    private func copyImageToClipboard() {
+        guard let image = createExportImage(),
+              let tiffData = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(pngData, forType: .png)
+    }
+
+    private func exportSVG() {
+        guard let svgData = createSVGData() else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.svg]
+        panel.nameFieldStringValue = "\(sanitizedLabel).svg"
+
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? svgData.write(to: url)
+            }
+        }
+    }
+
+    private func exportPNG() {
+        guard let image = createExportImage(),
+              let tiffData = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.nameFieldStringValue = "\(sanitizedLabel).png"
+
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                try? pngData.write(to: url)
+            }
+        }
+    }
+
     /// LaTeX without comments and \label{}
     private var latexPreview: String {
         var result = equation.latex
@@ -374,6 +530,53 @@ struct EquationRow: View {
 
             // Full-width divider
             Divider()
+        }
+        .contentShape(Rectangle())
+        .onDrag {
+            createDragItemProvider()
+        } preview: {
+            // Custom drag preview showing only the equation image
+            if let nsImage = cachedImage {
+                Image(nsImage: nsImage)
+            } else {
+                Text(equation.label)
+                    .padding(8)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(4)
+            }
+        }
+        .contextMenu {
+            Button("Copy SVG") {
+                copySVGToClipboard()
+            }
+            .disabled(svg == nil)
+
+            Button("Copy PNG") {
+                copyImageToClipboard()
+            }
+            .disabled(svg == nil)
+
+            Button("Copy LaTeX") {
+                copyLaTeXToClipboard()
+            }
+
+            Divider()
+
+            Button("Export SVG…") {
+                exportSVG()
+            }
+            .disabled(svg == nil)
+
+            Button("Export PNG…") {
+                exportPNG()
+            }
+            .disabled(svg == nil)
+
+            Divider()
+
+            Button("Delete", role: .destructive) {
+                NotificationCenter.default.post(name: .deleteEquation, object: equation.id)
+            }
         }
     }
 }
