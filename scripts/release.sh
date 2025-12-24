@@ -61,8 +61,8 @@ if command -v gh &> /dev/null && [ "${2}" = "--release" ]; then
     fi
     git push origin "v${VERSION}" --force
 
-    # Get tag message if available
-    TAG_MESSAGE=$(git tag -l --format='%(contents)' "v${VERSION}" 2>/dev/null | head -20)
+    # Get tag message if available (strip PGP signature if present)
+    TAG_MESSAGE=$(git tag -l --format='%(contents)' "v${VERSION}" 2>/dev/null | sed '/-----BEGIN PGP SIGNATURE-----/,$d' | head -20)
 
     # Build release notes
     RELEASE_NOTES="## Installation
