@@ -56,13 +56,14 @@ if command -v gh &> /dev/null && [ "${2}" = "--release" ]; then
     echo "Creating GitHub release..."
 
     # Create tag if it doesn't exist
-    if ! git rev-parse "v${VERSION}" >/dev/null 2>&1; then
-        git tag "v${VERSION}"
+    TAG_NAME="mac-v${VERSION}"
+    if ! git rev-parse "${TAG_NAME}" >/dev/null 2>&1; then
+        git tag "${TAG_NAME}"
     fi
-    git push origin "v${VERSION}" --force
+    git push origin "${TAG_NAME}" --force
 
     # Get tag message if available (strip PGP signature if present)
-    TAG_MESSAGE=$(git tag -l --format='%(contents)' "v${VERSION}" 2>/dev/null | sed '/-----BEGIN PGP SIGNATURE-----/,$d' | head -20)
+    TAG_MESSAGE=$(git tag -l --format='%(contents)' "${TAG_NAME}" 2>/dev/null | sed '/-----BEGIN PGP SIGNATURE-----/,$d' | head -20)
 
     # Build release notes
     RELEASE_NOTES="## Installation
@@ -83,7 +84,7 @@ if command -v gh &> /dev/null && [ "${2}" = "--release" ]; then
 ${RELEASE_NOTES}"
     fi
 
-    gh release create "v${VERSION}" "${BUILD_DIR}/${DMG_NAME}" \
+    gh release create "${TAG_NAME}" "${BUILD_DIR}/${DMG_NAME}" \
         --title "v${VERSION} (macOS)" \
         --notes "${RELEASE_NOTES}"
 
