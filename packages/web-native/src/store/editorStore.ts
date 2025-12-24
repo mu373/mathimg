@@ -28,6 +28,9 @@ interface EditorState {
   // Monaco editor instance
   editorInstance: MonacoEditor.IStandaloneCodeEditor | null;
 
+  // Editor settings
+  fontSize: number;
+
   // Debounce timer
   debounceTimer: ReturnType<typeof setTimeout> | null;
 
@@ -36,6 +39,7 @@ interface EditorState {
   setGlobalPreamble: (preamble: string) => void;
   setActiveEquation: (id: string | null) => void;
   setEditorInstance: (editor: MonacoEditor.IStandaloneCodeEditor | null) => void;
+  setFontSize: (size: number) => void;
 
   // Native integration
   loadFromNative: (document: string, globalPreamble?: string) => void;
@@ -52,6 +56,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   frontmatter: {},
   activeEquationId: null,
   editorInstance: null,
+  fontSize: 14,
   debounceTimer: null,
 
   setDocument: (document: string) => {
@@ -101,6 +106,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setEditorInstance: (editor: MonacoEditor.IStandaloneCodeEditor | null) => {
     set({ editorInstance: editor });
+  },
+
+  setFontSize: (size: number) => {
+    const { editorInstance } = get();
+    set({ fontSize: size });
+    // Update Monaco editor font size
+    if (editorInstance) {
+      editorInstance.updateOptions({ fontSize: size });
+    }
   },
 
   loadFromNative: (document: string, globalPreamble?: string) => {
@@ -232,6 +246,9 @@ if (typeof window !== 'undefined') {
     },
     addEquation: () => {
       useEditorStore.getState().addEquation();
+    },
+    setFontSize: (data) => {
+      useEditorStore.getState().setFontSize(data.fontSize);
     },
   };
 }

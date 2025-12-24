@@ -95,9 +95,11 @@ struct EditorWebView: NSViewRepresentable {
         weak var webView: WKWebView?
         var lastSelectedId: String?
         var lastDocumentContent: String?
+        var lastFontSize: Int?
         var isReady = false
         private var addEquationObserver: NSObjectProtocol?
         private var documentImportedObserver: NSObjectProtocol?
+        private var fontSizeObserver: NSObjectProtocol?
 
         init(_ parent: EditorWebView) {
             self.parent = parent
@@ -120,6 +122,15 @@ struct EditorWebView: NSViewRepresentable {
             ) { [weak self] _ in
                 self?.forceSyncDocumentToWeb()
             }
+
+            // Listen for font size changes in UserDefaults
+            fontSizeObserver = NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.checkFontSizeChange()
+            }
         }
 
         deinit {
@@ -129,6 +140,22 @@ struct EditorWebView: NSViewRepresentable {
             if let observer = documentImportedObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
+            if let observer = fontSizeObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
+
+        private func checkFontSizeChange() {
+            guard isReady, let webView = webView else { return }
+
+            let fontSize = UserDefaults.standard.integer(forKey: "editorFontSize")
+            let effectiveSize = fontSize == 0 ? 14 : fontSize
+
+            guard effectiveSize != lastFontSize else { return }
+            lastFontSize = effectiveSize
+
+            let js = "window.nativeAPI?.setFontSize?.({ fontSize: \(effectiveSize) })"
+            webView.evaluateJavaScript(js)
         }
 
         func addEquation() {
@@ -173,6 +200,8 @@ struct EditorWebView: NSViewRepresentable {
                 lastDocumentContent = parent.document.projectData.document
                 // Send initial document to web
                 sendDocumentToWeb()
+                // Send initial font size
+                sendFontSizeToWeb()
 
             case "documentChanged":
                 if let body = message.body as? [String: Any],
@@ -258,6 +287,17 @@ struct EditorWebView: NSViewRepresentable {
             })
             """
 
+            webView.evaluateJavaScript(js)
+        }
+
+        private func sendFontSizeToWeb() {
+            guard isReady, let webView = webView else { return }
+
+            let fontSize = UserDefaults.standard.integer(forKey: "editorFontSize")
+            let effectiveSize = fontSize == 0 ? 14 : fontSize
+            lastFontSize = effectiveSize
+
+            let js = "window.nativeAPI?.setFontSize?.({ fontSize: \(effectiveSize) })"
             webView.evaluateJavaScript(js)
         }
 

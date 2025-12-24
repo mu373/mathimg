@@ -63,6 +63,22 @@ struct MathEditApp: App {
                     NSApp.keyWindow?.toggleTabBar(nil)
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Increase Editor Font Size") {
+                    let currentSize = UserDefaults.standard.integer(forKey: "editorFontSize")
+                    let newSize = min((currentSize == 0 ? 14 : currentSize) + 1, 24)
+                    UserDefaults.standard.set(newSize, forKey: "editorFontSize")
+                }
+                .keyboardShortcut("+", modifiers: [.command])
+
+                Button("Decrease Editor Font Size") {
+                    let currentSize = UserDefaults.standard.integer(forKey: "editorFontSize")
+                    let newSize = max((currentSize == 0 ? 14 : currentSize) - 1, 10)
+                    UserDefaults.standard.set(newSize, forKey: "editorFontSize")
+                }
+                .keyboardShortcut("-", modifiers: [.command])
             }
         }
 

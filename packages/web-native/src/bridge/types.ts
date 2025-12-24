@@ -9,6 +9,9 @@ export interface NativeToWebMessages {
   setActiveEquation: {
     equationId: string;
   };
+  setFontSize: {
+    fontSize: number;
+  };
   requestContent: void;
 }
 
@@ -51,6 +54,7 @@ declare global {
     nativeAPI?: {
       loadDocument: (data: NativeToWebMessages['loadDocument']) => void;
       setActiveEquation: (data: NativeToWebMessages['setActiveEquation']) => void;
+      setFontSize: (data: NativeToWebMessages['setFontSize']) => void;
       requestContent: () => void;
       addEquation: () => void;
     };

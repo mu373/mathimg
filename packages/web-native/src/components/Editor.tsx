@@ -5,9 +5,16 @@ import { useEditorStore } from '../store/editorStore';
 import { importSvg, isRunningInNative } from '../bridge/native-bridge';
 
 export function Editor() {
-  const { document, setDocument, setEditorInstance, handleCursorChange } = useEditorStore();
+  const { document, setDocument, setEditorInstance, handleCursorChange, fontSize, editorInstance } = useEditorStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Update Monaco editor font size when it changes
+  useEffect(() => {
+    if (editorInstance) {
+      editorInstance.updateOptions({ fontSize });
+    }
+  }, [fontSize, editorInstance]);
 
   // Handle drag and drop for SVG files
   useEffect(() => {
@@ -172,7 +179,7 @@ export function Editor() {
         theme="latex-light"
         options={{
           minimap: { enabled: false },
-          fontSize: 14,
+          fontSize,
           wordWrap: 'on',
           lineNumbers: 'on',
           scrollBeyondLastLine: false,
