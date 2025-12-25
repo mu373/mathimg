@@ -263,7 +263,7 @@ struct ContentView: View {
                     Label("Delete", systemImage: "trash")
                 }
                 .disabled(highlightedEquationId == nil)
-                .help("Delete Equation (⌘⌫)")
+                .help("Delete Equation (⇧⌘⌫)")
             }
 
             ToolbarItem(id: "export", placement: .automatic) {
@@ -384,14 +384,91 @@ struct ContentView: View {
     }
 
     private func deleteSelectedEquation() {
-        // Use highlightedEquationId to delete the equation under cursor
-        guard let id = highlightedEquationId,
-              let equationIndex = document.equations.firstIndex(where: { $0.id == id }) else {
+        var lines = document.projectData.document.components(separatedBy: "\n")
+
+        // Try to find equation by ID first
+        if let id = highlightedEquationId,
+           let equationIndex = document.equations.firstIndex(where: { $0.id == id }) {
+            deleteEquationAt(index: equationIndex, lines: &lines)
             return
         }
 
+        // No equation selected - try to delete empty section at cursor
+        guard let cursor = cursorLine else { return }
+        deleteEmptySectionAtLine(cursor, lines: &lines)
+    }
+
+    private func deleteEmptySectionAtLine(_ cursorLine: Int, lines: inout [String]) {
+        // Find section boundaries (between --- separators)
+        var sectionStart = cursorLine
+        var sectionEnd = cursorLine
+
+        // Find start (go backwards to find ---)
+        while sectionStart > 0 {
+            let trimmed = lines[sectionStart - 1].trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("---") {
+                break
+            }
+            sectionStart -= 1
+        }
+
+        // Find end (go forwards to find --- or end of document)
+        while sectionEnd < lines.count - 1 {
+            let trimmed = lines[sectionEnd + 1].trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("---") {
+                break
+            }
+            sectionEnd += 1
+        }
+
+        // Check if section is empty (only whitespace)
+        var isEmpty = true
+        for i in sectionStart...sectionEnd {
+            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty && !trimmed.hasPrefix("---") {
+                isEmpty = false
+                break
+            }
+        }
+
+        guard isEmpty else { return }
+
+        // Include the separator before if it exists
+        var deleteStart = sectionStart
+        var deleteEnd = sectionEnd
+
+        if sectionStart > 0 && lines[sectionStart - 1].trimmingCharacters(in: .whitespaces).hasPrefix("---") {
+            deleteStart = sectionStart - 1
+        }
+
+        // Calculate target line
+        let linesDeleted = deleteEnd - deleteStart + 1
+        var targetLine = max(0, deleteStart - 1)
+
+        // Find last non-empty line before deleteStart
+        while targetLine > 0 && lines[targetLine].trimmingCharacters(in: .whitespaces).isEmpty {
+            targetLine -= 1
+        }
+
+        if deleteStart <= deleteEnd && deleteEnd < lines.count {
+            lines.removeSubrange(deleteStart...deleteEnd)
+        }
+
+        // Update document
+        let newDocument = lines.joined(separator: "\n")
+        document.updateDocument(newDocument)
+
+        // Move cursor
+        NotificationCenter.default.post(
+            name: .moveCursorToLine,
+            object: nil,
+            userInfo: ["line": targetLine]
+        )
+        NotificationCenter.default.post(name: .documentImported, object: nil)
+    }
+
+    private func deleteEquationAt(index equationIndex: Int, lines: inout [String]) {
         let equation = document.equations[equationIndex]
-        var lines = document.projectData.document.components(separatedBy: "\n")
 
         // Find the actual range to delete
         var deleteStart = equation.startLine

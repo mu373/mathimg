@@ -81,3 +81,10 @@ export function requestRender(
 export function importSvg(svgContent: string): void {
   sendToNative('importSvg', { svgContent });
 }
+
+/**
+ * Request deletion of current equation (forwards to native)
+ */
+export function requestDeleteEquation(): void {
+  sendToNative('deleteEquation', undefined as never);
+}

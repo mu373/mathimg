@@ -2,10 +2,10 @@ import MonacoEditor from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 import { useRef, useEffect, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
-import { importSvg, isRunningInNative } from '../bridge/native-bridge';
+import { importSvg, isRunningInNative, requestDeleteEquation } from '../bridge/native-bridge';
 
 export function Editor() {
-  const { document, setDocument, setEditorInstance, handleCursorChange, fontSize, editorInstance } = useEditorStore();
+  const { document, setDocument, setEditorInstance, handleCursorChange, fontSize, editorInstance, jumpToPreviousEquation, jumpToNextEquation } = useEditorStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -152,6 +152,36 @@ export function Editor() {
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
       run: (ed) => {
         ed.trigger('keyboard', 'editor.action.commentLine', {});
+      },
+    });
+
+    // Add Alt+Up to jump to previous equation
+    editor.addAction({
+      id: 'jump-to-previous-equation',
+      label: 'Jump to Previous Equation',
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.UpArrow],
+      run: () => {
+        jumpToPreviousEquation();
+      },
+    });
+
+    // Add Alt+Down to jump to next equation
+    editor.addAction({
+      id: 'jump-to-next-equation',
+      label: 'Jump to Next Equation',
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.DownArrow],
+      run: () => {
+        jumpToNextEquation();
+      },
+    });
+
+    // Add Cmd+Shift+Delete to delete equation
+    editor.addAction({
+      id: 'delete-equation',
+      label: 'Delete Equation',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Backspace],
+      run: () => {
+        requestDeleteEquation();
       },
     });
 

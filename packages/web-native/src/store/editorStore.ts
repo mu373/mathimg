@@ -52,6 +52,8 @@ interface EditorState {
   loadFromNative: (document: string, globalPreamble?: string, cursorLine?: number) => void;
   jumpToEquation: (equationId: string) => void;
   jumpToLine: (line: number) => void;
+  jumpToPreviousEquation: () => void;
+  jumpToNextEquation: () => void;
   handleCursorChange: (line: number, column: number) => void;
   addEquation: () => void;
 }
@@ -207,6 +209,73 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  jumpToPreviousEquation: () => {
+    const { editorInstance, equations } = get();
+    if (!editorInstance || equations.length === 0) return;
+
+    const model = editorInstance.getModel();
+    if (!model) return;
+
+    const cursorLine = editorInstance.getPosition()?.lineNumber ?? 1;
+    const sections = analyzeDocumentStructure(model);
+    const currentIndex = findSectionIndexAtLine(sections, cursorLine);
+
+    // Find previous section with content, or previous section
+    let targetIndex = currentIndex - 1;
+    if (targetIndex < 0) targetIndex = 0;
+
+    // Find corresponding equation for that section
+    const targetSection = sections[targetIndex];
+    if (targetSection) {
+      // Find equation that overlaps with this section
+      const eq = equations.find(
+        e => (e.startLine + 1) >= targetSection.startLine && (e.startLine + 1) <= targetSection.endLine
+      );
+      if (eq) {
+        get().jumpToEquation(eq.id);
+      } else {
+        // No equation in section, just jump to middle of section
+        const midLine = getSectionMiddleLine(targetSection);
+        editorInstance.setPosition({ lineNumber: midLine, column: 1 });
+        editorInstance.revealLineInCenter(midLine);
+        editorInstance.focus();
+      }
+    }
+  },
+
+  jumpToNextEquation: () => {
+    const { editorInstance, equations } = get();
+    if (!editorInstance || equations.length === 0) return;
+
+    const model = editorInstance.getModel();
+    if (!model) return;
+
+    const cursorLine = editorInstance.getPosition()?.lineNumber ?? 1;
+    const sections = analyzeDocumentStructure(model);
+    const currentIndex = findSectionIndexAtLine(sections, cursorLine);
+
+    // Find next section
+    let targetIndex = currentIndex + 1;
+    if (targetIndex >= sections.length) targetIndex = sections.length - 1;
+
+    const targetSection = sections[targetIndex];
+    if (targetSection) {
+      // Find equation that overlaps with this section
+      const eq = equations.find(
+        e => (e.startLine + 1) >= targetSection.startLine && (e.startLine + 1) <= targetSection.endLine
+      );
+      if (eq) {
+        get().jumpToEquation(eq.id);
+      } else {
+        // No equation in section, just jump to middle of section
+        const midLine = getSectionMiddleLine(targetSection);
+        editorInstance.setPosition({ lineNumber: midLine, column: 1 });
+        editorInstance.revealLineInCenter(midLine);
+        editorInstance.focus();
+      }
+    }
+  },
+
   handleCursorChange: (line: number, column: number) => {
     const { equations } = get();
 
@@ -232,20 +301,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const sections = analyzeDocumentStructure(model);
     const cursorLine = editorInstance.getPosition()?.lineNumber ?? 1;
 
-    // Check if there's already an empty trailing section - just focus there
+    // Find which section the cursor is in
+    const currentSectionIndex = findSectionIndexAtLine(sections, cursorLine);
+    const currentSection = sections[currentSectionIndex];
+    const isInLastSection = currentSection?.isLast ?? true;
+
+    // If cursor is in last section and it's empty, just focus there
     const emptyTrailing = hasEmptyTrailingSection(sections);
-    if (emptyTrailing) {
+    if (isInLastSection && emptyTrailing) {
       const midLine = getSectionMiddleLine(emptyTrailing);
       editorInstance.setPosition({ lineNumber: midLine, column: 1 });
       editorInstance.revealLineInCenter(midLine);
       editorInstance.focus();
       return;
     }
-
-    // Find which section the cursor is in
-    const currentSectionIndex = findSectionIndexAtLine(sections, cursorLine);
-    const currentSection = sections[currentSectionIndex];
-    const isInLastSection = currentSection?.isLast ?? true;
 
     if (isInLastSection) {
       // Append at end of document
@@ -311,6 +380,12 @@ if (typeof window !== 'undefined') {
     },
     addEquation: () => {
       useEditorStore.getState().addEquation();
+    },
+    jumpToPreviousEquation: () => {
+      useEditorStore.getState().jumpToPreviousEquation();
+    },
+    jumpToNextEquation: () => {
+      useEditorStore.getState().jumpToNextEquation();
     },
     setFontSize: (data) => {
       useEditorStore.getState().setFontSize(data.fontSize);

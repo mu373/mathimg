@@ -40,6 +40,7 @@ export interface WebToNativeMessages {
   importSvg: {
     svgContent: string;
   };
+  deleteEquation: void;
 }
 
 // Extend window with native bridge types
@@ -58,6 +59,8 @@ declare global {
       setFontSize: (data: NativeToWebMessages['setFontSize']) => void;
       requestContent: () => void;
       addEquation: () => void;
+      jumpToPreviousEquation: () => void;
+      jumpToNextEquation: () => void;
       moveCursorToLine: (line: number) => void;
     };
   }

@@ -43,6 +43,7 @@ struct EditorWebView: NSViewRepresentable {
         contentController.add(context.coordinator, name: "requestRender")
         contentController.add(context.coordinator, name: "ready")
         contentController.add(context.coordinator, name: "importSvg")
+        contentController.add(context.coordinator, name: "deleteEquation")
 
         // Allow local file access
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
@@ -102,6 +103,8 @@ struct EditorWebView: NSViewRepresentable {
         private var documentImportedObserver: NSObjectProtocol?
         private var fontSizeObserver: NSObjectProtocol?
         private var moveCursorObserver: NSObjectProtocol?
+        private var previousEquationObserver: NSObjectProtocol?
+        private var nextEquationObserver: NSObjectProtocol?
 
         init(_ parent: EditorWebView) {
             self.parent = parent
@@ -149,6 +152,24 @@ struct EditorWebView: NSViewRepresentable {
                     self?.pendingCursorLine = line
                 }
             }
+
+            // Listen for previousEquation notification
+            previousEquationObserver = NotificationCenter.default.addObserver(
+                forName: .previousEquation,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.jumpToPreviousEquation()
+            }
+
+            // Listen for nextEquation notification
+            nextEquationObserver = NotificationCenter.default.addObserver(
+                forName: .nextEquation,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.jumpToNextEquation()
+            }
         }
 
         deinit {
@@ -162,6 +183,12 @@ struct EditorWebView: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(observer)
             }
             if let observer = moveCursorObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = previousEquationObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = nextEquationObserver {
                 NotificationCenter.default.removeObserver(observer)
             }
         }
@@ -182,6 +209,16 @@ struct EditorWebView: NSViewRepresentable {
         func addEquation() {
             guard isReady, let webView = webView else { return }
             webView.evaluateJavaScript("window.nativeAPI?.addEquation()")
+        }
+
+        func jumpToPreviousEquation() {
+            guard isReady, let webView = webView else { return }
+            webView.evaluateJavaScript("window.nativeAPI?.jumpToPreviousEquation?.()")
+        }
+
+        func jumpToNextEquation() {
+            guard isReady, let webView = webView else { return }
+            webView.evaluateJavaScript("window.nativeAPI?.jumpToNextEquation?.()")
         }
 
         func moveCursorToLine(_ line: Int) {
@@ -289,6 +326,12 @@ struct EditorWebView: NSViewRepresentable {
                             userInfo: ["svgContent": svgContent]
                         )
                     }
+                }
+
+            case "deleteEquation":
+                // Forward delete request to native
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .deleteEquation, object: nil)
                 }
 
             default:

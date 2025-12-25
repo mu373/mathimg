@@ -43,6 +43,24 @@ struct MathEditApp: App {
                     )
                 }
                 .keyboardShortcut(";", modifiers: [.command])
+
+                Divider()
+
+                Button("Previous Equation") {
+                    NotificationCenter.default.post(
+                        name: .previousEquation,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.option])
+
+                Button("Next Equation") {
+                    NotificationCenter.default.post(
+                        name: .nextEquation,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.option])
             }
 
             CommandGroup(after: .pasteboard) {
@@ -88,7 +106,7 @@ struct MathEditApp: App {
                         object: nil
                     )
                 }
-                .keyboardShortcut(.delete, modifiers: [.command])
+                .keyboardShortcut(.delete, modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .importExport) {
@@ -154,11 +172,13 @@ struct MathEditApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+        .commandsRemoved()
 
         Window("Acknowledgements", id: "acknowledgements") {
             AcknowledgementsView()
         }
         .windowResizability(.contentSize)
+        .commandsRemoved()
         #endif
     }
 }
@@ -167,6 +187,8 @@ struct MathEditApp: App {
 extension Notification.Name {
     static let addEquation = Notification.Name("addEquation")
     static let deleteEquation = Notification.Name("deleteEquation")
+    static let previousEquation = Notification.Name("previousEquation")
+    static let nextEquation = Notification.Name("nextEquation")
     static let moveCursorToLine = Notification.Name("moveCursorToLine")
     static let exportEquationSVG = Notification.Name("exportEquationSVG")
     static let exportEquationPNG = Notification.Name("exportEquationPNG")
