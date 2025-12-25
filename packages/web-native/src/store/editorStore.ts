@@ -12,6 +12,13 @@ import {
   requestRender,
   isRunningInNative
 } from '../bridge/native-bridge';
+import {
+  analyzeDocumentStructure,
+  findSectionIndexAtLine,
+  hasEmptyTrailingSection,
+  getSectionMiddleLine,
+  NEW_EQUATION_CONTENT,
+} from '../utils/documentStructure';
 
 interface EditorState {
   // Document content
@@ -149,11 +156,38 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const eq = equations.find(e => e.id === equationId);
 
     if (editorInstance && eq) {
-      const lineNumber = eq.endLine + 1;
       const model = editorInstance.getModel();
-      const column = model ? model.getLineMaxColumn(lineNumber) : 1;
-      editorInstance.setPosition({ lineNumber, column });
-      editorInstance.revealLineInCenter(lineNumber);
+      if (!model) return;
+
+      // Find the last line with actual equation content (not empty, ---, or just \label{})
+      // Monaco uses 1-based line numbers, parser uses 0-based
+      let targetLine = eq.startLine + 1; // Default to start line
+      let column = 1;
+
+      for (let line = eq.endLine + 1; line >= eq.startLine + 1; line--) {
+        const content = model.getLineContent(line);
+        const trimmed = content.trim();
+
+        // Skip empty lines, separators, and lines that only contain \label{...}
+        if (trimmed === '' || trimmed === '---' || /^\\label\{[^}]*\}$/.test(trimmed)) {
+          continue;
+        }
+
+        targetLine = line;
+
+        // Check for inline \label{} and position cursor before it
+        const labelMatch = content.match(/^(.+?)\s*\\label\{[^}]*\}\s*$/);
+        if (labelMatch) {
+          // Position cursor at end of content before \label
+          column = labelMatch[1].length + 1;
+        } else {
+          column = model.getLineMaxColumn(line);
+        }
+        break;
+      }
+
+      editorInstance.setPosition({ lineNumber: targetLine, column });
+      editorInstance.revealLineInCenter(targetLine);
       editorInstance.focus();
       set({ activeEquationId: equationId });
     }
@@ -188,24 +222,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   addEquation: () => {
-    const { editorInstance, activeEquationId, equations } = get();
+    const { editorInstance } = get();
     if (!editorInstance) return;
 
     const model = editorInstance.getModel();
     if (!model) return;
 
-    // Find current equation to insert after
-    const currentEq = equations.find(e => e.id === activeEquationId);
-    const currentEqIndex = currentEq ? equations.findIndex(e => e.id === activeEquationId) : -1;
-    const isLastEquation = currentEqIndex === equations.length - 1 || equations.length === 0;
+    // Analyze document structure based on --- separators
+    const sections = analyzeDocumentStructure(model);
+    const cursorLine = editorInstance.getPosition()?.lineNumber ?? 1;
 
-    // Monaco uses 1-based line numbers, parser uses 0-based
-    if (!currentEq || isLastEquation) {
+    // Check if there's already an empty trailing section - just focus there
+    const emptyTrailing = hasEmptyTrailingSection(sections);
+    if (emptyTrailing) {
+      const midLine = getSectionMiddleLine(emptyTrailing);
+      editorInstance.setPosition({ lineNumber: midLine, column: 1 });
+      editorInstance.revealLineInCenter(midLine);
+      editorInstance.focus();
+      return;
+    }
+
+    // Find which section the cursor is in
+    const currentSectionIndex = findSectionIndexAtLine(sections, cursorLine);
+    const currentSection = sections[currentSectionIndex];
+    const isInLastSection = currentSection?.isLast ?? true;
+
+    if (isInLastSection) {
       // Append at end of document
+      // Structure: [---] [empty] [cursor] [empty]
       const lastLine = model.getLineCount();
-      const lastLineContent = model.getLineContent(lastLine);
-      const needsLeadingNewline = lastLineContent.trim() !== '';
-      const newContent = (needsLeadingNewline ? '\n' : '') + '\n---\n';
 
       editorInstance.executeEdits('addEquation', [{
         range: {
@@ -214,24 +259,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           endLineNumber: lastLine,
           endColumn: model.getLineMaxColumn(lastLine),
         },
-        text: newContent,
+        text: NEW_EQUATION_CONTENT.append,
       }]);
 
-      // Calculate new cursor position after edit
+      // Cursor on the middle empty line
       setTimeout(() => {
         const newLineCount = model.getLineCount();
-        editorInstance.setPosition({ lineNumber: newLineCount, column: 1 });
-        editorInstance.revealLineInCenter(newLineCount);
+        // Structure: ..., ---, empty, cursor, empty
+        editorInstance.setPosition({ lineNumber: newLineCount - 1, column: 1 });
+        editorInstance.revealLineInCenter(newLineCount - 1);
         editorInstance.focus();
       }, 0);
     } else {
-      // Insert between equations
-      // nextEq.startLine is 0-based, Monaco is 1-based
-      const nextEq = equations[currentEqIndex + 1];
-      const insertLineNumber = nextEq.startLine + 1; // Convert to 1-based
-
-      // Insert: newline + --- + newline before next equation
-      const newContent = '\n---\n';
+      // Insert between sections
+      // Find the separator line after current section
+      const nextSection = sections[currentSectionIndex + 1];
+      const insertLineNumber = nextSection.startLine;
 
       editorInstance.executeEdits('addEquation', [{
         range: {
@@ -240,14 +283,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           endLineNumber: insertLineNumber,
           endColumn: 1,
         },
-        text: newContent,
+        text: NEW_EQUATION_CONTENT.insert,
       }]);
 
-      // Set cursor position after a brief delay to ensure edit is processed
-      const cursorLine = insertLineNumber + 1;
+      // Cursor on the middle empty line
       setTimeout(() => {
-        editorInstance.setPosition({ lineNumber: cursorLine, column: 1 });
-        editorInstance.revealLineInCenter(cursorLine);
+        editorInstance.setPosition({ lineNumber: insertLineNumber + 1, column: 1 });
+        editorInstance.revealLineInCenter(insertLineNumber + 1);
         editorInstance.focus();
       }, 50);
     }
