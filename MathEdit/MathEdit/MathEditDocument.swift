@@ -16,6 +16,8 @@ final class MathEditDocument: ReferenceFileDocument {
     @Published var frontmatter: DocumentFrontmatter = DocumentFrontmatter()
     @Published var renderedSVGs: [String: String] = [:]
     private var lastRenderedLatex: [String: String] = [:]
+    /// Cache of pasted SVGs by normalized latex (for instant preview on paste)
+    private var pastedSvgCache: [String: String] = [:]
 
     static var readableContentTypes: [UTType] { [.matheditDocument, .json] }
     static var writableContentTypes: [UTType] { [.matheditDocument] }
@@ -52,6 +54,15 @@ final class MathEditDocument: ReferenceFileDocument {
         projectData.document = content
     }
 
+    /// Normalize latex for cache matching (strip label and whitespace)
+    private func normalizeLatexForCache(_ latex: String) -> String {
+        latex.replacingOccurrences(
+            of: #"\\label\{[^}]*\}"#,
+            with: "",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Update equations from parsed web content
     func updateEquations(_ newEquations: [Equation], frontmatter: DocumentFrontmatter) {
         self.frontmatter = frontmatter
@@ -82,10 +93,23 @@ final class MathEditDocument: ReferenceFileDocument {
         }
         self.equations = updatedEquations
 
-        // Trigger rendering for new equations or those with changed latex
-        let equationsToRender = updatedEquations.filter { eq in
-            renderedSVGs[eq.id] == nil || lastRenderedLatex[eq.id] != eq.latex
+        // Check for cached pasted SVGs first
+        var equationsToRender: [Equation] = []
+        for eq in updatedEquations {
+            if renderedSVGs[eq.id] == nil || lastRenderedLatex[eq.id] != eq.latex {
+                // Check pasted SVG cache by normalized latex
+                let normalized = normalizeLatexForCache(eq.latex)
+                if let cachedSvg = pastedSvgCache[normalized] {
+                    // Use cached SVG from paste
+                    renderedSVGs[eq.id] = cachedSvg
+                    lastRenderedLatex[eq.id] = eq.latex
+                    pastedSvgCache.removeValue(forKey: normalized)
+                } else {
+                    equationsToRender.append(eq)
+                }
+            }
         }
+
         if !equationsToRender.isEmpty {
             RenderService.shared.render(equations: equationsToRender, frontmatter: frontmatter, document: self)
         }
@@ -100,61 +124,73 @@ final class MathEditDocument: ReferenceFileDocument {
         }
     }
 
-    /// Check if SVG contains duplicate equations (by ID first, then by label)
-    func checkSvgForDuplicates(_ svgContent: String) -> (hasDuplicates: Bool, duplicateLabels: [String]) {
-        let result = parseSvg(svgContent)
-        let existingIds = Set(equations.map { $0.id })
-        let existingLabels = Set(equations.map { $0.label })
+    /// Duplicate info captured at check time to avoid race conditions
+    struct DuplicateInfo {
+        let label: String
+        let hasExplicitLabel: Bool
+        let existingSvg: String?
+    }
 
-        var duplicateLabels: [String] = []
+    /// Check if SVG contains duplicate equations (by ID first, then by latex content, then by label)
+    /// Returns all info needed for dialog to avoid race conditions with async equation updates
+    func checkSvgForDuplicates(_ svgContent: String) -> (hasDuplicates: Bool, duplicates: [DuplicateInfo]) {
+        let result = parseSvg(svgContent)
+
+        var duplicates: [DuplicateInfo] = []
         for eq in result.equations {
-            if existingIds.contains(eq.id) || existingLabels.contains(eq.label) {
-                duplicateLabels.append(eq.label)
+            // Try to find by ID first
+            var existing = equations.first(where: { $0.id == eq.id })
+
+            // Fallback 1: find by normalized latex content (IDs can change between copy/paste)
+            if existing == nil {
+                let incomingNormalized = normalizeLatexForCache(eq.latex)
+                existing = equations.first(where: { normalizeLatexForCache($0.latex) == incomingNormalized })
+            }
+
+            // Fallback 2: find by label (for labeled equations)
+            if existing == nil && !eq.label.isEmpty && !eq.label.hasPrefix("eq") {
+                existing = equations.first(where: { $0.label == eq.label })
+            }
+
+            if let existing = existing {
+                let hasExplicitLabel = existing.latex.contains("\\label{")
+                let existingSvg = renderedSVGs[existing.id]
+                duplicates.append(DuplicateInfo(
+                    label: existing.label,
+                    hasExplicitLabel: hasExplicitLabel,
+                    existingSvg: existingSvg
+                ))
             }
         }
-        return (hasDuplicates: !duplicateLabels.isEmpty, duplicateLabels: duplicateLabels)
+        return (hasDuplicates: !duplicates.isEmpty, duplicates: duplicates)
     }
 
     /// Import equations from SVG content
-    func importSvgEquations(_ svgContent: String, overwrite: Bool = false, keepBoth: Bool = false) {
+    /// - Parameters:
+    ///   - svgContent: SVG content containing equation metadata
+    ///   - overwrite: Replace existing equation if duplicate found
+    ///   - keepBoth: Keep both equations with different labels if duplicate found
+    ///   - insertAfterLine: Insert after the equation containing this line (nil = append at end)
+    func importSvgEquations(_ svgContent: String, overwrite: Bool = false, keepBoth: Bool = false, insertAfterLine: Int? = nil) {
         let result = parseSvg(svgContent)
         guard !result.equations.isEmpty else { return }
 
-        let existingIds = Set(equations.map { $0.id })
-        let existingLabels = Set(equations.map { $0.label })
+        // Cache the pasted SVG for instant preview (indexed by normalized latex)
+        for eq in result.equations {
+            let normalized = normalizeLatexForCache(eq.latex)
+            pastedSvgCache[normalized] = svgContent
+        }
+
         var newDoc = projectData.document
 
         for eq in result.equations {
-            // Check for duplicate by ID first, then by label
-            let matchById = existingIds.contains(eq.id)
-            let matchByLabel = existingLabels.contains(eq.label)
-            let isDuplicate = matchById || matchByLabel
+            // Check for duplicate by ID
+            let existingEq = equations.first(where: { $0.id == eq.id })
+            let isDuplicate = existingEq != nil
 
-            // Determine the label to use
-            var finalLabel = eq.label
-            var finalLatex = eq.latex
-
-            if isDuplicate && keepBoth {
-                // Generate a unique label by appending a number
-                finalLabel = generateUniqueLabel(baseLabel: eq.label, existingLabels: existingLabels)
-                // Replace the label in latex if it exists
-                if eq.latex.contains("\\label{") {
-                    finalLatex = eq.latex.replacingOccurrences(
-                        of: "\\label{\(eq.label)}",
-                        with: "\\label{\(finalLabel)}"
-                    )
-                }
-            }
-
-            // Ensure latex has a label
-            let hasLabel = finalLatex.contains("\\label{")
-            let latexWithLabel = hasLabel ? finalLatex : "\(finalLatex)\n\\label{\(finalLabel)}"
+            let finalLatex = eq.latex
 
             if isDuplicate && overwrite {
-                // Find existing equation to replace (by ID first, then by label)
-                let existingEq = equations.first(where: { $0.id == eq.id })
-                    ?? equations.first(where: { $0.label == eq.label })
-
                 if let existingEq = existingEq {
                     var lines = newDoc.components(separatedBy: "\n")
 
@@ -181,31 +217,58 @@ final class MathEditDocument: ReferenceFileDocument {
                     let afterLines = afterLine < lines.count ? Array(lines[(endReplaceLine + 1)...]) : []
 
                     let replacement = hasSeparatorBefore
-                        ? ["---", "", latexWithLabel, ""]
-                        : [latexWithLabel]
+                        ? ["---", "", finalLatex, ""]
+                        : [finalLatex]
 
                     lines = beforeLines + replacement + afterLines
                     newDoc = lines.joined(separator: "\n")
                 }
             } else if !isDuplicate || keepBoth {
-                // Append new equation (either not a duplicate, or keeping both)
-                let trimmedDoc = newDoc.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Find insertion point based on cursor position
+                if let insertLine = insertAfterLine,
+                   let currentEq = equations.first(where: { $0.startLine <= insertLine && insertLine <= $0.endLine }) {
+                    // Insert after the current equation
+                    var lines = newDoc.components(separatedBy: "\n")
 
-                if trimmedDoc.isEmpty {
-                    // Empty document - just add the equation without separator
-                    newDoc = "\(latexWithLabel)\n"
-                } else if trimmedDoc.hasSuffix("---") {
-                    // Document already ends with separator - just add the equation
-                    if !newDoc.hasSuffix("\n\n") {
-                        newDoc = newDoc.trimmingCharacters(in: .newlines) + "\n\n"
+                    // Find where the current equation ends (including trailing empty lines)
+                    var insertionLine = currentEq.endLine + 1
+
+                    // Skip trailing empty lines after the current equation
+                    while insertionLine < lines.count && lines[insertionLine].trimmingCharacters(in: .whitespaces).isEmpty {
+                        insertionLine += 1
                     }
-                    newDoc += "\(latexWithLabel)\n\n"
+
+                    // Check if there's a separator after
+                    let hasSeparatorAfter = insertionLine < lines.count &&
+                        lines[insertionLine].trimmingCharacters(in: .whitespaces).hasPrefix("---")
+
+                    if hasSeparatorAfter {
+                        let beforeLines = Array(lines[0..<insertionLine])
+                        let afterLines = Array(lines[insertionLine...])
+                        lines = beforeLines + ["---", "", finalLatex, ""] + afterLines
+                    } else {
+                        let beforeLines = Array(lines[0..<insertionLine])
+                        let afterLines = insertionLine < lines.count ? Array(lines[insertionLine...]) : []
+                        lines = beforeLines + ["---", "", finalLatex, ""] + afterLines
+                    }
+                    newDoc = lines.joined(separator: "\n")
                 } else {
-                    // Add separator before the new equation
-                    if !newDoc.hasSuffix("\n\n") {
-                        newDoc = newDoc.trimmingCharacters(in: .newlines) + "\n\n"
+                    // Append at end
+                    let trimmedDoc = newDoc.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if trimmedDoc.isEmpty {
+                        newDoc = "\(finalLatex)\n"
+                    } else if trimmedDoc.hasSuffix("---") {
+                        if !newDoc.hasSuffix("\n\n") {
+                            newDoc = newDoc.trimmingCharacters(in: .newlines) + "\n\n"
+                        }
+                        newDoc += "\(finalLatex)\n\n"
+                    } else {
+                        if !newDoc.hasSuffix("\n\n") {
+                            newDoc = newDoc.trimmingCharacters(in: .newlines) + "\n\n"
+                        }
+                        newDoc += "---\n\n\(finalLatex)\n\n"
                     }
-                    newDoc += "---\n\n\(latexWithLabel)\n\n"
                 }
             }
         }

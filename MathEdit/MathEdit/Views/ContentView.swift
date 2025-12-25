@@ -117,6 +117,7 @@ class DropZoneNSView: NSView {
 // MARK: - Import Dialog View
 struct ImportDialogView: View {
     let duplicateLabel: String
+    let hasExplicitLabel: Bool
     let existingSvg: String?
     let incomingSvg: String?
     let onCancel: () -> Void
@@ -128,7 +129,9 @@ struct ImportDialogView: View {
             Text("Equation Already Exists")
                 .font(.headline)
 
-            Text("\"\(duplicateLabel)\" already exists in this document.")
+            Text(hasExplicitLabel
+                ? "\"\(duplicateLabel)\" already exists in this document."
+                : "This equation already exists in this document.")
                 .foregroundColor(.secondary)
 
             HStack(spacing: 24) {
@@ -201,6 +204,14 @@ struct PreviewBox: View {
     }
 }
 
+// MARK: - Import Dialog Item
+struct ImportDialogItem: Identifiable {
+    let id = UUID()
+    let info: MathEditDocument.DuplicateInfo
+    let incomingSvg: String
+    let pendingSvg: String
+}
+
 // MARK: - Content View
 struct ContentView: View {
     @ObservedObject var document: MathEditDocument
@@ -208,10 +219,7 @@ struct ContentView: View {
     @State private var cursorLine: Int?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isDragging = false
-    @State private var showImportDialog = false
-    @State private var pendingSvgContent: String?
-    @State private var duplicateLabels: [String] = []
-    @State private var incomingSvgPreview: String?
+    @State private var importDialogItem: ImportDialogItem?
 
     var body: some View {
         ZStack {
@@ -321,6 +329,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .deleteEquation)) { _ in
             deleteSelectedEquation()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .pasteSVG)) { _ in
+            pasteSVGFromClipboard()
+        }
 
             // AppKit-based drop zone overlay (works over WKWebView)
             DropZoneOverlay(isDragging: $isDragging) { svgContent in
@@ -351,46 +362,25 @@ struct ContentView: View {
                 .allowsHitTesting(false)
             }
         }
-        .sheet(isPresented: $showImportDialog) {
+        .sheet(item: $importDialogItem) { item in
             ImportDialogView(
-                duplicateLabel: duplicateLabels.first ?? "",
-                existingSvg: existingSvgForDuplicate,
-                incomingSvg: incomingSvgPreview,
+                duplicateLabel: item.info.label,
+                hasExplicitLabel: item.info.hasExplicitLabel,
+                existingSvg: item.info.existingSvg ?? item.incomingSvg,
+                incomingSvg: item.incomingSvg,
                 onCancel: {
-                    showImportDialog = false
-                    pendingSvgContent = nil
-                    duplicateLabels = []
-                    incomingSvgPreview = nil
+                    importDialogItem = nil
                 },
                 onKeepBoth: {
-                    if let svg = pendingSvgContent {
-                        document.importSvgEquations(svg, overwrite: false, keepBoth: true)
-                    }
-                    showImportDialog = false
-                    pendingSvgContent = nil
-                    duplicateLabels = []
-                    incomingSvgPreview = nil
+                    document.importSvgEquations(item.pendingSvg, overwrite: false, keepBoth: true, insertAfterLine: cursorLine)
+                    importDialogItem = nil
                 },
                 onReplace: {
-                    if let svg = pendingSvgContent {
-                        document.importSvgEquations(svg, overwrite: true)
-                    }
-                    showImportDialog = false
-                    pendingSvgContent = nil
-                    duplicateLabels = []
-                    incomingSvgPreview = nil
+                    document.importSvgEquations(item.pendingSvg, overwrite: true, insertAfterLine: cursorLine)
+                    importDialogItem = nil
                 }
             )
         }
-    }
-
-    /// Get the rendered SVG for the duplicate equation
-    private var existingSvgForDuplicate: String? {
-        guard let label = duplicateLabels.first,
-              let equation = document.equations.first(where: { $0.label == label }) else {
-            return nil
-        }
-        return document.renderedSVGs[equation.id]
     }
 
     private func deleteSelectedEquation() {
@@ -595,6 +585,39 @@ struct ContentView: View {
 
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(equation.latex, forType: .string)
+    }
+
+    private func pasteSVGFromClipboard() {
+        let pasteboard = NSPasteboard.general
+
+        guard let items = pasteboard.pasteboardItems else { return }
+
+        for item in items {
+            // Try file URL first
+            if let urlString = item.string(forType: .fileURL),
+               let url = URL(string: urlString),
+               url.pathExtension.lowercased() == "svg",
+               let content = try? String(contentsOf: url, encoding: .utf8) {
+                processSvgImport(content)
+                return
+            }
+
+            // Try public.svg-image
+            if let svgData = item.data(forType: .init("public.svg-image")),
+               let content = String(data: svgData, encoding: .utf8) {
+                processSvgImport(content)
+                return
+            }
+
+            // Try plain string that looks like SVG
+            if let string = item.string(forType: .string) {
+                let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("<svg") || trimmed.hasPrefix("<?xml") {
+                    processSvgImport(string)
+                    return
+                }
+            }
+        }
     }
 
     private func exportSelectedAsPNG() {
@@ -832,16 +855,17 @@ struct ContentView: View {
     }
 
     private func processSvgImport(_ svgContent: String) {
-        let (hasDuplicates, labels) = document.checkSvgForDuplicates(svgContent)
+        let (hasDuplicates, duplicates) = document.checkSvgForDuplicates(svgContent)
 
-        if hasDuplicates {
-            pendingSvgContent = svgContent
-            duplicateLabels = labels
-            // Extract the SVG content for preview (the dropped file itself is the rendered SVG)
-            incomingSvgPreview = svgContent
-            showImportDialog = true
+        if hasDuplicates, let first = duplicates.first {
+            // Use sheet(item:) pattern - data is captured immediately
+            importDialogItem = ImportDialogItem(
+                info: first,
+                incomingSvg: svgContent,
+                pendingSvg: svgContent
+            )
         } else {
-            document.importSvgEquations(svgContent)
+            document.importSvgEquations(svgContent, insertAfterLine: cursorLine)
         }
     }
 }
